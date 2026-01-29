@@ -29,19 +29,41 @@ const UsersManagement = lazy(() => import("@/pages/dashboard/admin/UsersManageme
 const OwnerDashboard = lazy(() => import("@/pages/dashboard/OwnerDashboard"));
 const SiteSettings = lazy(() => import("@/pages/dashboard/owner/SiteSettings"));
 
-// Coming Soon placeholders
-const ComingSoon = lazy(() => import("@/pages/dashboard/ComingSoon"));
+// Applicant placeholder pages
+const ApplicantApplications = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ApplicantApplications })));
 const ApplicantDocuments = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ApplicantDocuments })));
 const ApplicantMessages = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ApplicantMessages })));
 const ApplicantPayments = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ApplicantPayments })));
 const ApplicantSettings = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ApplicantSettings })));
+
+// Reviewer placeholder pages
 const ReviewerQueue = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ReviewerQueue })));
+const ReviewerCompleted = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ReviewerCompleted })));
+const ReviewerMessages = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ReviewerMessages })));
+const ReviewerSettings = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.ReviewerSettings })));
+
+// Agent placeholder pages
+const AgentQueue = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AgentQueue })));
 const AgentReferrals = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AgentReferrals })));
 const AgentCommissions = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AgentCommissions })));
-const AdminAnalytics = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AdminAnalytics })));
+const AgentMessages = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AgentMessages })));
+const AgentSettings = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AgentSettings })));
+
+// Admin placeholder pages
+const AdminApplications = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AdminApplications })));
+const AdminQueue = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AdminQueue })));
 const AdminPackages = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AdminPackages })));
-const OwnerAnalytics = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.OwnerAnalytics })));
+const AdminPayments = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AdminPayments })));
+const AdminAnalytics = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AdminAnalytics })));
+const AdminMessages = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AdminMessages })));
+const AdminSettings = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.AdminSettings })));
+
+// Owner placeholder pages
+const OwnerApplications = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.OwnerApplications })));
+const OwnerPackages = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.OwnerPackages })));
+const OwnerPayments = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.OwnerPayments })));
 const OwnerCommissions = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.OwnerCommissions })));
+const OwnerAnalytics = lazy(() => import("@/pages/dashboard/ComingSoon").then(m => ({ default: m.OwnerAnalytics })));
 
 function PageLoader() {
   return (
@@ -62,6 +84,11 @@ function DashboardRouter() {
         <Route path="/dashboard/applicant/applications/new">
           <ProtectedRoute minLevel={1}>
             <NewApplication />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/applicant/applications">
+          <ProtectedRoute minLevel={1}>
+            <ApplicantApplications />
           </ProtectedRoute>
         </Route>
         <Route path="/dashboard/applicant/documents">
@@ -96,6 +123,21 @@ function DashboardRouter() {
             <ReviewerQueue />
           </ProtectedRoute>
         </Route>
+        <Route path="/dashboard/reviewer/completed">
+          <ProtectedRoute minLevel={2}>
+            <ReviewerCompleted />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/reviewer/messages">
+          <ProtectedRoute minLevel={2}>
+            <ReviewerMessages />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/reviewer/settings">
+          <ProtectedRoute minLevel={2}>
+            <ReviewerSettings />
+          </ProtectedRoute>
+        </Route>
         <Route path="/dashboard/reviewer">
           <ProtectedRoute minLevel={2}>
             <ReviewerDashboard />
@@ -103,6 +145,11 @@ function DashboardRouter() {
         </Route>
 
         {/* Agent Routes (Level 3+) */}
+        <Route path="/dashboard/agent/queue">
+          <ProtectedRoute minLevel={3}>
+            <AgentQueue />
+          </ProtectedRoute>
+        </Route>
         <Route path="/dashboard/agent/referrals">
           <ProtectedRoute minLevel={3}>
             <AgentReferrals />
@@ -111,6 +158,16 @@ function DashboardRouter() {
         <Route path="/dashboard/agent/commissions">
           <ProtectedRoute minLevel={3}>
             <AgentCommissions />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/agent/messages">
+          <ProtectedRoute minLevel={3}>
+            <AgentMessages />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/agent/settings">
+          <ProtectedRoute minLevel={3}>
+            <AgentSettings />
           </ProtectedRoute>
         </Route>
         <Route path="/dashboard/agent">
@@ -125,14 +182,39 @@ function DashboardRouter() {
             <UsersManagement />
           </ProtectedRoute>
         </Route>
+        <Route path="/dashboard/admin/applications">
+          <ProtectedRoute minLevel={4}>
+            <AdminApplications />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/admin/queue">
+          <ProtectedRoute minLevel={4}>
+            <AdminQueue />
+          </ProtectedRoute>
+        </Route>
         <Route path="/dashboard/admin/packages">
           <ProtectedRoute minLevel={4}>
             <AdminPackages />
           </ProtectedRoute>
         </Route>
+        <Route path="/dashboard/admin/payments">
+          <ProtectedRoute minLevel={4}>
+            <AdminPayments />
+          </ProtectedRoute>
+        </Route>
         <Route path="/dashboard/admin/analytics">
           <ProtectedRoute minLevel={4}>
             <AdminAnalytics />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/admin/messages">
+          <ProtectedRoute minLevel={4}>
+            <AdminMessages />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/admin/settings">
+          <ProtectedRoute minLevel={4}>
+            <AdminSettings />
           </ProtectedRoute>
         </Route>
         <Route path="/dashboard/admin">
@@ -152,14 +234,29 @@ function DashboardRouter() {
             <UsersManagement />
           </ProtectedRoute>
         </Route>
-        <Route path="/dashboard/owner/analytics">
+        <Route path="/dashboard/owner/applications">
           <ProtectedRoute minLevel={5}>
-            <OwnerAnalytics />
+            <OwnerApplications />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/owner/packages">
+          <ProtectedRoute minLevel={5}>
+            <OwnerPackages />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/owner/payments">
+          <ProtectedRoute minLevel={5}>
+            <OwnerPayments />
           </ProtectedRoute>
         </Route>
         <Route path="/dashboard/owner/commissions">
           <ProtectedRoute minLevel={5}>
             <OwnerCommissions />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard/owner/analytics">
+          <ProtectedRoute minLevel={5}>
+            <OwnerAnalytics />
           </ProtectedRoute>
         </Route>
         <Route path="/dashboard/owner">
