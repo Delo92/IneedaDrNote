@@ -230,6 +230,11 @@ function App() {
                       <SiteSettings />
                     </ProtectedRoute>
                   </Route>
+                  <Route path="/dashboard/owner/settings">
+                    <ProtectedRoute minLevel={5}>
+                      <SharedSettingsPage />
+                    </ProtectedRoute>
+                  </Route>
                   <Route path="/dashboard/owner/payments">
                     <ProtectedRoute minLevel={5}>
                       <PlaceholderPage />
