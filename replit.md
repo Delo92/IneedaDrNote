@@ -91,3 +91,43 @@ Role names are configurable per deployment via the `siteConfig` table.
 - `DATABASE_URL` - PostgreSQL connection string (required)
 - `SESSION_SECRET` - Session encryption key (defaults to dev value)
 - `VITE_FIREBASE_*` - Optional Firebase configuration for enhanced auth
+
+## Current Implementation Status
+
+### Completed Features
+- **Authentication**: Session-based login/registration with bcrypt password hashing
+- **5 Role-Based Dashboards**: Each with unique stats, actions, and navigation
+- **Application Workflow**: 3-step wizard for creating new applications
+- **Package Management**: Browse and select service packages
+- **Owner Configuration**: Full white-label settings (branding, role names, contact info)
+- **Admin User Management**: Search, filter, and edit user levels/status
+- **Dark/Light Theme**: System-aware with manual toggle
+
+### API Endpoints
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+- `GET /api/auth/me` - Get current user
+- `GET /api/config` - Get site configuration
+- `GET /api/packages` - List active packages
+- `GET /api/applications` - Get user's applications
+- `POST /api/applications` - Create new application
+- `GET /api/queue` - Get review queue (Level 2+)
+- `GET /api/commissions` - Get commissions (Level 3+)
+- `GET /api/admin/users` - List all users (Level 4+)
+- `PUT /api/admin/users/:id` - Update user (Level 4+)
+- `GET /api/admin/applications` - List all applications (Level 4+)
+- `PUT /api/owner/config` - Update site config (Level 5)
+
+### Key Routes
+- `/` - Landing page
+- `/login`, `/register` - Authentication
+- `/packages` - Service packages listing
+- `/dashboard/applicant` - Applicant dashboard
+- `/dashboard/applicant/applications/new` - New application wizard
+- `/dashboard/reviewer` - Reviewer dashboard with queue
+- `/dashboard/agent` - Agent dashboard with referrals
+- `/dashboard/admin` - Admin dashboard
+- `/dashboard/admin/users` - User management
+- `/dashboard/owner` - Owner dashboard
+- `/dashboard/owner/site-settings` - White-label configuration

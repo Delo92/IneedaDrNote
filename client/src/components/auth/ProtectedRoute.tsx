@@ -4,8 +4,8 @@ import { Loader2 } from "lucide-react";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredLevel?: number;
-  minLevel?: number;
+  requiredLevel?: number;  // Exact level match
+  minLevel?: number;       // Minimum level (inclusive) - user.level >= minLevel
 }
 
 export function ProtectedRoute({
@@ -32,14 +32,14 @@ export function ProtectedRoute({
     return null;
   }
 
-  // Check exact level requirement
-  if (requiredLevel !== undefined && user.userLevel !== requiredLevel) {
-    // Redirect to appropriate dashboard
+  // Check exact level requirement (only for level-specific dashboards)
+  // Higher level users (admins/owners) can access lower level dashboards
+  if (requiredLevel !== undefined && user.userLevel < requiredLevel) {
     redirectToDashboard(user.userLevel, setLocation);
     return null;
   }
 
-  // Check minimum level requirement
+  // Check minimum level requirement (for admin features that require at least X level)
   if (minLevel !== undefined && user.userLevel < minLevel) {
     redirectToDashboard(user.userLevel, setLocation);
     return null;
