@@ -34,10 +34,13 @@ const SiteSettings = lazy(() => import("@/pages/dashboard/owner/SiteSettings"));
 const ApplicationsPage = lazy(() => import("@/pages/dashboard/placeholders/ApplicationsPage"));
 const DocumentsPage = lazy(() => import("@/pages/dashboard/applicant/DocumentsPage"));
 const PaymentsPage = lazy(() => import("@/pages/dashboard/applicant/PaymentsPage"));
-const MessagesPage = lazy(() => import("@/pages/dashboard/applicant/MessagesPage"));
-const SettingsPage = lazy(() => import("@/pages/dashboard/applicant/SettingsPage"));
 
-// Generic placeholder for other pages
+// Shared pages (used across multiple levels)
+const SharedSettingsPage = lazy(() => import("@/pages/dashboard/shared/SettingsPage"));
+const SharedMessagesPage = lazy(() => import("@/pages/dashboard/shared/MessagesPage"));
+const SharedQueuePage = lazy(() => import("@/pages/dashboard/shared/QueuePage"));
+
+// Generic placeholder for pages not yet implemented
 const PlaceholderPage = lazy(() => import("@/pages/dashboard/placeholders/PlaceholderPage"));
 
 function PageLoader() {
@@ -96,7 +99,7 @@ function App() {
                   </Route>
                   <Route path="/dashboard/applicant/messages">
                     <ProtectedRoute minLevel={1}>
-                      <MessagesPage />
+                      <SharedMessagesPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/applicant/payments">
@@ -106,7 +109,7 @@ function App() {
                   </Route>
                   <Route path="/dashboard/applicant/settings">
                     <ProtectedRoute minLevel={1}>
-                      <SettingsPage />
+                      <SharedSettingsPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/applicant">
@@ -118,7 +121,7 @@ function App() {
                   {/* Reviewer Routes (Level 2+) */}
                   <Route path="/dashboard/reviewer/queue">
                     <ProtectedRoute minLevel={2}>
-                      <PlaceholderPage />
+                      <SharedQueuePage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/reviewer/completed">
@@ -128,12 +131,12 @@ function App() {
                   </Route>
                   <Route path="/dashboard/reviewer/messages">
                     <ProtectedRoute minLevel={2}>
-                      <PlaceholderPage />
+                      <SharedMessagesPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/reviewer/settings">
                     <ProtectedRoute minLevel={2}>
-                      <PlaceholderPage />
+                      <SharedSettingsPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/reviewer">
@@ -145,7 +148,7 @@ function App() {
                   {/* Agent Routes (Level 3+) */}
                   <Route path="/dashboard/agent/queue">
                     <ProtectedRoute minLevel={3}>
-                      <PlaceholderPage />
+                      <SharedQueuePage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/agent/referrals">
@@ -160,12 +163,12 @@ function App() {
                   </Route>
                   <Route path="/dashboard/agent/messages">
                     <ProtectedRoute minLevel={3}>
-                      <PlaceholderPage />
+                      <SharedMessagesPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/agent/settings">
                     <ProtectedRoute minLevel={3}>
-                      <PlaceholderPage />
+                      <SharedSettingsPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/agent">
@@ -187,7 +190,7 @@ function App() {
                   </Route>
                   <Route path="/dashboard/admin/queue">
                     <ProtectedRoute minLevel={4}>
-                      <PlaceholderPage />
+                      <SharedQueuePage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/admin/reports">
@@ -197,12 +200,12 @@ function App() {
                   </Route>
                   <Route path="/dashboard/admin/messages">
                     <ProtectedRoute minLevel={4}>
-                      <PlaceholderPage />
+                      <SharedMessagesPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/admin/settings">
                     <ProtectedRoute minLevel={4}>
-                      <PlaceholderPage />
+                      <SharedSettingsPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/admin">
@@ -222,7 +225,7 @@ function App() {
                       <PackagesManagement />
                     </ProtectedRoute>
                   </Route>
-                  <Route path="/dashboard/owner/settings">
+                  <Route path="/dashboard/owner/site-settings">
                     <ProtectedRoute minLevel={5}>
                       <SiteSettings />
                     </ProtectedRoute>

@@ -132,13 +132,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const Sidebar = () => (
     <div className="flex h-full flex-col gap-2">
-      <div className="flex h-14 items-center border-b px-4">
+      <div className="flex flex-col border-b px-4 py-3">
         <Link href="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground font-bold">
             {config.siteName.charAt(0)}
           </div>
           <span className="font-semibold">{config.siteName}</span>
         </Link>
+        <div className="mt-2 flex items-center gap-2">
+          <Badge variant="outline" className="text-xs" data-testid="badge-user-level">
+            {getLevelName(user.userLevel)} Dashboard
+          </Badge>
+        </div>
       </div>
       <ScrollArea className="flex-1 px-3">
         <nav className="flex flex-col gap-1 py-2">
