@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,7 +6,6 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -15,6 +14,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConfig } from "@/contexts/ConfigContext";
 import { useToast } from "@/hooks/use-toast";
@@ -29,11 +35,12 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function Login() {
   const { login } = useAuth();
-  const { config } = useConfig();
+  const { config, getLevelName } = useConfig();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedLevel, setSelectedLevel] = useState<string>("");
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -42,6 +49,14 @@ export default function Login() {
       password: "",
     },
   });
+
+  // When level is selected, auto-fill email
+  useEffect(() => {
+    if (selectedLevel) {
+      form.setValue("email", `Level${selectedLevel}@test.com`);
+      form.setValue("password", "password123");
+    }
+  }, [selectedLevel, form]);
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
@@ -108,6 +123,37 @@ export default function Login() {
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {/* Level Selector for Quick Login */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Quick Login (Test Accounts)</label>
+                  <Select value={selectedLevel} onValueChange={setSelectedLevel}>
+                    <SelectTrigger data-testid="select-login-level">
+                      <SelectValue placeholder="Select a level to auto-fill..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Level 1 - {getLevelName(1)}</SelectItem>
+                      <SelectItem value="2">Level 2 - {getLevelName(2)}</SelectItem>
+                      <SelectItem value="3">Level 3 - {getLevelName(3)}</SelectItem>
+                      <SelectItem value="4">Level 4 - {getLevelName(4)}</SelectItem>
+                      <SelectItem value="5">Level 5 - {getLevelName(5)}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Select a level to auto-fill test credentials
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      Or enter manually
+                    </span>
+                  </div>
+                </div>
+
                 <FormField
                   control={form.control}
                   name="email"
