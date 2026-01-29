@@ -26,6 +26,7 @@ const ReviewerDashboard = lazy(() => import("@/pages/dashboard/ReviewerDashboard
 const AgentDashboard = lazy(() => import("@/pages/dashboard/AgentDashboard"));
 const AdminDashboard = lazy(() => import("@/pages/dashboard/AdminDashboard"));
 const UsersManagement = lazy(() => import("@/pages/dashboard/admin/UsersManagement"));
+const PackagesManagement = lazy(() => import("@/pages/dashboard/admin/PackagesManagement"));
 const OwnerDashboard = lazy(() => import("@/pages/dashboard/OwnerDashboard"));
 const SiteSettings = lazy(() => import("@/pages/dashboard/owner/SiteSettings"));
 
@@ -194,7 +195,7 @@ function DashboardRouter() {
         </Route>
         <Route path="/dashboard/admin/packages">
           <ProtectedRoute minLevel={4}>
-            <AdminPackages />
+            <PackagesManagement />
           </ProtectedRoute>
         </Route>
         <Route path="/dashboard/admin/payments">
@@ -241,7 +242,7 @@ function DashboardRouter() {
         </Route>
         <Route path="/dashboard/owner/packages">
           <ProtectedRoute minLevel={5}>
-            <OwnerPackages />
+            <PackagesManagement />
           </ProtectedRoute>
         </Route>
         <Route path="/dashboard/owner/payments">
