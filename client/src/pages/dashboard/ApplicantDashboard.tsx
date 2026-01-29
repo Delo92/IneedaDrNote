@@ -68,10 +68,10 @@ export default function ApplicantDashboard() {
               Track your applications and manage your documents.
             </p>
           </div>
-          <Button asChild data-testid="button-new-application">
-            <Link href="/dashboard/applicant/applications/new">
-              <Plus className="mr-2 h-4 w-4" />
-              New Application
+          <Button asChild data-testid="button-fill-registration">
+            <Link href="/dashboard/applicant/registration">
+              <FileText className="mr-2 h-4 w-4" />
+              Complete Registration
             </Link>
           </Button>
         </div>
@@ -138,7 +138,7 @@ export default function ApplicantDashboard() {
               </CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/dashboard/applicant/applications">
+              <Link href="/dashboard/applicant/registration">
                 View All
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -197,12 +197,12 @@ export default function ApplicantDashboard() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2">No active applications</h3>
                 <p className="text-muted-foreground mb-4 max-w-sm">
-                  Get started by creating a new application for our services.
+                  Complete your registration, then purchase a package to start your application.
                 </p>
                 <Button asChild>
-                  <Link href="/dashboard/applicant/applications/new">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Start New Application
+                  <Link href="/dashboard/applicant/registration">
+                    <FileText className="mr-2 h-4 w-4" />
+                    Complete Registration
                   </Link>
                 </Button>
               </div>
