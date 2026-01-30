@@ -40,6 +40,7 @@ const configSchema = z.object({
   heroTitle: z.string().optional(),
   heroSubtitle: z.string().optional(),
   heroBackgroundUrl: z.string().url().optional().or(z.literal("")),
+  heroMediaUrl: z.string().url().optional().or(z.literal("")),
   heroButtonText: z.string().optional(),
   heroButtonLink: z.string().optional(),
   heroSecondaryButtonText: z.string().optional(),
@@ -80,6 +81,7 @@ export default function SiteSettings() {
       heroTitle: "",
       heroSubtitle: "",
       heroBackgroundUrl: "",
+      heroMediaUrl: "",
       heroButtonText: "Get Started",
       heroButtonLink: "/register",
       heroSecondaryButtonText: "View Services",
@@ -130,6 +132,7 @@ export default function SiteSettings() {
         heroTitle: config.heroTitle || "",
         heroSubtitle: config.heroSubtitle || "",
         heroBackgroundUrl: config.heroBackgroundUrl || "",
+        heroMediaUrl: config.heroMediaUrl || "",
         heroButtonText: config.heroButtonText || "Get Started",
         heroButtonLink: config.heroButtonLink || "/register",
         heroSecondaryButtonText: config.heroSecondaryButtonText || "View Services",
@@ -436,15 +439,15 @@ export default function SiteSettings() {
 
                     <FormField
                       control={form.control}
-                      name="heroBackgroundUrl"
+                      name="heroMediaUrl"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Hero Background Image URL</FormLabel>
+                          <FormLabel>Hero Media URL (Image, Video, or GIF)</FormLabel>
                           <FormControl>
-                            <Input placeholder="https://example.com/hero-bg.jpg" data-testid="input-hero-bg" {...field} />
+                            <Input placeholder="https://example.com/hero.mp4" data-testid="input-hero-media" {...field} />
                           </FormControl>
                           <FormDescription>
-                            Optional background image for the hero section
+                            Add an image (.jpg, .png), video (.mp4, .webm), or GIF to display in the hero section. Videos and GIFs will autoplay on loop.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>

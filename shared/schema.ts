@@ -20,6 +20,7 @@ export const siteConfig = pgTable("site_config", {
   heroTitle: text("hero_title"),
   heroSubtitle: text("hero_subtitle"),
   heroBackgroundUrl: text("hero_background_url"),
+  heroMediaUrl: text("hero_media_url"),
   heroButtonText: text("hero_button_text").default("Get Started"),
   heroButtonLink: text("hero_button_link").default("/register"),
   heroSecondaryButtonText: text("hero_secondary_button_text").default("View Services"),

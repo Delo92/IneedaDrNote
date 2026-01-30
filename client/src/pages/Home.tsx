@@ -15,9 +15,23 @@ import {
   MessageSquare,
 } from "lucide-react";
 
+function getMediaType(url: string): 'image' | 'video' | 'gif' {
+  const extension = url.split('?')[0].split('.').pop()?.toLowerCase();
+  if (['mp4', 'webm', 'ogg', 'mov'].includes(extension || '')) {
+    return 'video';
+  }
+  if (extension === 'gif') {
+    return 'gif';
+  }
+  return 'image';
+}
+
 export default function Home() {
   const { config } = useConfig();
   const { isAuthenticated, user } = useAuth();
+
+  const heroMediaUrl = config.heroMediaUrl || config.heroBackgroundUrl;
+  const mediaType = heroMediaUrl ? getMediaType(heroMediaUrl) : null;
 
   const getDashboardPath = () => {
     if (!user) return "/register";
@@ -76,26 +90,55 @@ export default function Home() {
       {/* Hero Section */}
       <section 
         className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-primary/10 py-20 md:py-32"
-        style={config.heroBackgroundUrl ? {
-          backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${config.heroBackgroundUrl})`,
+        style={heroMediaUrl && mediaType === 'image' ? {
+          backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${heroMediaUrl})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         } : undefined}
       >
-        {!config.heroBackgroundUrl && <div className="absolute inset-0 bg-grid-pattern opacity-5" />}
+        {/* Video Background */}
+        {heroMediaUrl && mediaType === 'video' && (
+          <>
+            <video
+              className="absolute inset-0 w-full h-full object-cover"
+              src={heroMediaUrl}
+              autoPlay
+              loop
+              muted
+              playsInline
+              data-testid="video-hero-background"
+            />
+            <div className="absolute inset-0 bg-black/50" />
+          </>
+        )}
+        
+        {/* GIF Background */}
+        {heroMediaUrl && mediaType === 'gif' && (
+          <>
+            <img
+              className="absolute inset-0 w-full h-full object-cover"
+              src={heroMediaUrl}
+              alt="Hero background"
+              data-testid="img-hero-gif-background"
+            />
+            <div className="absolute inset-0 bg-black/50" />
+          </>
+        )}
+        
+        {!heroMediaUrl && <div className="absolute inset-0 bg-grid-pattern opacity-5" />}
         <div className="container relative">
           <div className="mx-auto max-w-3xl text-center">
             <Badge variant="secondary" className="mb-4" data-testid="badge-tagline">
               {config.tagline}
             </Badge>
             <h1 
-              className={`text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl mb-6 ${config.heroBackgroundUrl ? 'text-white' : ''}`} 
+              className={`text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl mb-6 ${heroMediaUrl ? 'text-white' : ''}`} 
               data-testid="text-hero-title"
             >
               {config.heroTitle || config.siteName}
             </h1>
             <p 
-              className={`text-lg md:text-xl mb-8 max-w-2xl mx-auto ${config.heroBackgroundUrl ? 'text-white/90' : 'text-muted-foreground'}`} 
+              className={`text-lg md:text-xl mb-8 max-w-2xl mx-auto ${heroMediaUrl ? 'text-white/90' : 'text-muted-foreground'}`} 
               data-testid="text-hero-description"
             >
               {config.heroSubtitle || config.description || "A comprehensive platform for managing applications, documents, and approvals. Start your application today and get approved quickly."}
@@ -116,7 +159,7 @@ export default function Home() {
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>
-                  <Button size="lg" variant="outline" asChild data-testid="button-hero-learn" className={config.heroBackgroundUrl ? 'bg-white/10 border-white/20 text-white hover:bg-white/20' : ''}>
+                  <Button size="lg" variant="outline" asChild data-testid="button-hero-learn" className={heroMediaUrl ? 'bg-white/10 border-white/20 text-white hover:bg-white/20' : ''}>
                     <Link href={config.heroSecondaryButtonLink || "/packages"}>
                       {config.heroSecondaryButtonText || "View Services"}
                     </Link>

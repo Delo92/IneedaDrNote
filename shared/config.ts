@@ -18,6 +18,7 @@ export interface WhiteLabelConfig {
   heroTitle?: string;
   heroSubtitle?: string;
   heroBackgroundUrl?: string;
+  heroMediaUrl?: string;
   heroButtonText?: string;
   heroButtonLink?: string;
   heroSecondaryButtonText?: string;
