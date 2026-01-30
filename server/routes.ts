@@ -494,10 +494,10 @@ export async function registerRoutes(
     }
   });
 
-  // Level 2+: Complete a call
+  // Level 2+: Complete a call (approve or deny - moves to Level 3 if approved)
   app.post("/api/queue/:id/complete", requireAuth, requireLevel(2), async (req, res) => {
     try {
-      const { notes, outcome } = req.body;
+      const { notes, outcome } = req.body; // outcome: "approved" or "denied"
       const entry = await storage.getQueueEntry(req.params.id);
       if (!entry) {
         res.status(404).json({ message: "Queue entry not found" });
@@ -514,6 +514,31 @@ export async function registerRoutes(
         notes,
         outcome,
       });
+      
+      // Update the application status based on outcome
+      if (entry.applicationId) {
+        if (outcome === "approved") {
+          // Move to Level 3 work queue
+          await storage.updateApplication(entry.applicationId, {
+            status: "level3_work",
+            currentLevel: 3,
+            level2Notes: notes,
+            level2ApprovedAt: new Date(),
+            level2ApprovedBy: req.session.userId,
+            assignedReviewerId: req.session.userId,
+          });
+        } else if (outcome === "denied") {
+          await storage.updateApplication(entry.applicationId, {
+            status: "level2_denied",
+            currentLevel: 2,
+            level2Notes: notes,
+            rejectedAt: new Date(),
+            rejectedBy: req.session.userId,
+            rejectionReason: notes,
+          });
+        }
+      }
+      
       res.json(updated);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -555,6 +580,169 @@ export async function registerRoutes(
       } else {
         const commissions = await storage.getCommissionsByAgent(req.session.userId!);
         res.json(commissions);
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===========================================================================
+  // LEVEL 3 (AGENT) WORK QUEUE ROUTES
+  // ===========================================================================
+
+  // Get Level 3 work queue - applications ready for agent work
+  app.get("/api/agent/work-queue", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const applications = await storage.getApplicationsByStatus("level3_work");
+      res.json(applications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get Level 3 work queue stats
+  app.get("/api/agent/work-queue/stats", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const allApps = await storage.getApplicationsByStatus("level3_work");
+      const waiting = allApps.filter(a => !a.assignedAgentId).length;
+      const inProgress = allApps.filter(a => a.assignedAgentId === req.session.userId).length;
+      
+      // Get today's completions
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const completedApps = await storage.getApplicationsByStatus("level4_verification");
+      const completedToday = completedApps.filter(a => 
+        a.level3CompletedBy === req.session.userId && 
+        a.level3CompletedAt && new Date(a.level3CompletedAt) >= today
+      ).length;
+      
+      res.json({ waiting, inProgress, completedToday });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Level 3: Claim an application
+  app.post("/api/agent/work-queue/:id/claim", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const app = await storage.getApplication(req.params.id);
+      if (!app) {
+        res.status(404).json({ message: "Application not found" });
+        return;
+      }
+      if (app.status !== "level3_work") {
+        res.status(400).json({ message: "Application is not in Level 3 work queue" });
+        return;
+      }
+      if (app.assignedAgentId) {
+        res.status(400).json({ message: "Application already claimed by another agent" });
+        return;
+      }
+      const updated = await storage.updateApplication(req.params.id, {
+        assignedAgentId: req.session.userId,
+      });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Level 3: Complete work and send to Level 4 for verification
+  app.post("/api/agent/work-queue/:id/complete", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const { notes } = req.body;
+      const app = await storage.getApplication(req.params.id);
+      if (!app) {
+        res.status(404).json({ message: "Application not found" });
+        return;
+      }
+      if (app.assignedAgentId !== req.session.userId) {
+        res.status(403).json({ message: "This application is not assigned to you" });
+        return;
+      }
+      const updated = await storage.updateApplication(req.params.id, {
+        status: "level4_verification",
+        currentLevel: 4,
+        level3Notes: notes,
+        level3CompletedAt: new Date(),
+        level3CompletedBy: req.session.userId,
+      });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===========================================================================
+  // LEVEL 4 (ADMIN) VERIFICATION QUEUE ROUTES
+  // ===========================================================================
+
+  // Get Level 4 verification queue
+  app.get("/api/admin/verification-queue", requireAuth, requireLevel(4), async (req, res) => {
+    try {
+      const applications = await storage.getApplicationsByStatus("level4_verification");
+      res.json(applications);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get Level 4 verification queue stats
+  app.get("/api/admin/verification-queue/stats", requireAuth, requireLevel(4), async (req, res) => {
+    try {
+      const pendingApps = await storage.getApplicationsByStatus("level4_verification");
+      const pending = pendingApps.length;
+      
+      // Get today's verifications
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const completedApps = await storage.getApplicationsByStatus("completed");
+      const completedToday = completedApps.filter(a => 
+        a.level4VerifiedBy === req.session.userId && 
+        a.level4VerifiedAt && new Date(a.level4VerifiedAt) >= today
+      ).length;
+      
+      res.json({ pending, completedToday });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Level 4: Verify and complete an application
+  app.post("/api/admin/verification-queue/:id/verify", requireAuth, requireLevel(4), async (req, res) => {
+    try {
+      const { notes, approved } = req.body;
+      const app = await storage.getApplication(req.params.id);
+      if (!app) {
+        res.status(404).json({ message: "Application not found" });
+        return;
+      }
+      if (app.status !== "level4_verification") {
+        res.status(400).json({ message: "Application is not pending verification" });
+        return;
+      }
+      
+      if (approved) {
+        const updated = await storage.updateApplication(req.params.id, {
+          status: "completed",
+          currentLevel: 5,
+          level4Notes: notes,
+          level4VerifiedAt: new Date(),
+          level4VerifiedBy: req.session.userId,
+          approvedAt: new Date(),
+          approvedBy: req.session.userId,
+          completedAt: new Date(),
+        });
+        res.json(updated);
+      } else {
+        // Send back to Level 3 for rework
+        const updated = await storage.updateApplication(req.params.id, {
+          status: "level3_work",
+          currentLevel: 3,
+          level4Notes: notes,
+          assignedAgentId: app.assignedAgentId, // Keep same agent
+        });
+        res.json(updated);
       }
     } catch (error: any) {
       res.status(500).json({ message: error.message });

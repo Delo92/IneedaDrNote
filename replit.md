@@ -104,10 +104,39 @@ Role names are configurable per deployment via the `siteConfig` table.
 - **Admin User Management**: Search, filter, and edit user levels/status
 - **Dark/Light Theme**: System-aware with manual toggle
 
+### Application Processing Workflow
+
+The complete workflow for processing applications through the platform:
+
+**Flow A: Package REQUIRES Level 2 Interaction**
+1. Level 1 purchases package → creates application
+2. Level 1 joins call queue
+3. Level 2 claims caller, conducts call, then **approves or denies**
+   - If **approved** → Application moves to Level 3 work queue
+   - If **denied** → Application is rejected
+4. Level 3 claims application, does their work, marks complete
+5. Level 4 verifies and confirms → Application completed
+
+**Flow B: Package does NOT require Level 2 Interaction**
+1. Level 1 purchases package → creates application
+2. Application goes **directly** to Level 3 work queue
+3. Level 3 claims application, does their work, marks complete
+4. Level 4 verifies and confirms → Application completed
+
+**Application Status Values:**
+- `pending` - New application
+- `level2_review` - Waiting for Level 2 review
+- `level2_approved` - Approved by Level 2
+- `level2_denied` - Denied by Level 2
+- `level3_work` - In Level 3 work queue
+- `level3_complete` - Level 3 work done
+- `level4_verification` - Pending Level 4 verification
+- `completed` - Fully completed
+- `rejected` - Application rejected
+
 ### Call Queue System (Voice Consultation)
 - **Level 1 (Applicant)**: Can join call queue, see position, leave queue
-- **Level 2 (Reviewer)**: Pooled queue - any reviewer can claim callers, start calls, complete calls with outcomes
-- **Flow**: Level 1 purchases package requiring Level 2 interaction → joins queue → Level 2 claims → call happens → Level 2 completes with notes
+- **Level 2 (Reviewer)**: Pooled queue - any reviewer can claim callers, start calls, complete calls with outcomes (approved/denied)
 - **Integration Ready**: Schema includes roomId, roomToken fields for Twilio/GHL voice integration
 
 ### API Endpoints
@@ -126,8 +155,15 @@ Role names are configurable per deployment via the `siteConfig` table.
 - `POST /api/queue/leave` - Leave call queue (Level 1)
 - `POST /api/queue/:id/claim` - Claim a caller (Level 2+)
 - `POST /api/queue/:id/start-call` - Start call with caller (Level 2+)
-- `POST /api/queue/:id/complete` - Complete call with notes/outcome (Level 2+)
+- `POST /api/queue/:id/complete` - Complete call with outcome (approved/denied), moves to Level 3 if approved
 - `POST /api/queue/:id/release` - Release caller back to queue (Level 2+)
+- `GET /api/agent/work-queue` - Get Level 3 work queue
+- `GET /api/agent/work-queue/stats` - Get Level 3 queue stats
+- `POST /api/agent/work-queue/:id/claim` - Level 3 claims application
+- `POST /api/agent/work-queue/:id/complete` - Level 3 completes work, sends to Level 4
+- `GET /api/admin/verification-queue` - Get Level 4 verification queue
+- `GET /api/admin/verification-queue/stats` - Get Level 4 queue stats
+- `POST /api/admin/verification-queue/:id/verify` - Level 4 verifies (approved/rework)
 - `GET /api/commissions` - Get commissions (Level 3+)
 - `GET /api/admin/users` - List all users (Level 4+)
 - `PUT /api/admin/users/:id` - Update user (Level 4+)
@@ -143,7 +179,8 @@ Role names are configurable per deployment via the `siteConfig` table.
 - `/dashboard/applicant/call-queue` - Join call queue
 - `/dashboard/reviewer` - Reviewer dashboard with queue
 - `/dashboard/reviewer/call-queue` - Manage incoming calls
-- `/dashboard/agent` - Agent dashboard with referrals
+- `/dashboard/agent` - Agent dashboard
+- `/dashboard/agent/queue` - Level 3 work queue
 - `/dashboard/admin` - Admin dashboard
 - `/dashboard/admin/users` - User management
 - `/dashboard/owner` - Owner dashboard
