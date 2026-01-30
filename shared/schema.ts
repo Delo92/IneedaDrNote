@@ -54,6 +54,8 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").notNull().default(true),
   referralCode: text("referral_code").unique(),
   referredByUserId: varchar("referred_by_user_id"),
+  lastEditedBy: varchar("last_edited_by"),
+  lastEditedAt: timestamp("last_edited_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -470,3 +472,32 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
 export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({ id: true, createdAt: true });
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 export type ActivityLog = typeof activityLogs.$inferSelect;
+
+// ============================================================================
+// USER NOTES (for Level 3/4/5 to leave notes on user profiles)
+// ============================================================================
+
+export const userNotes = pgTable("user_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  authorId: varchar("author_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const userNotesRelations = relations(userNotes, ({ one }) => ({
+  user: one(users, {
+    fields: [userNotes.userId],
+    references: [users.id],
+    relationName: "notesAbout",
+  }),
+  author: one(users, {
+    fields: [userNotes.authorId],
+    references: [users.id],
+    relationName: "notesWritten",
+  }),
+}));
+
+export const insertUserNoteSchema = createInsertSchema(userNotes).omit({ id: true, createdAt: true });
+export type InsertUserNote = z.infer<typeof insertUserNoteSchema>;
+export type UserNote = typeof userNotes.$inferSelect;

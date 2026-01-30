@@ -11,6 +11,7 @@ import {
   notifications,
   activityLogs,
   siteConfig,
+  userNotes,
   type User,
   type InsertUser,
   type Package,
@@ -35,6 +36,8 @@ import {
   type InsertActivityLog,
   type SiteConfig,
   type InsertSiteConfig,
+  type UserNote,
+  type InsertUserNote,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, like, or } from "drizzle-orm";
@@ -123,6 +126,10 @@ export interface IStorage {
   // Site Config
   getSiteConfig(): Promise<SiteConfig | undefined>;
   updateSiteConfig(data: Partial<InsertSiteConfig>): Promise<SiteConfig>;
+
+  // User Notes
+  getUserNotes(userId: string): Promise<(UserNote & { author?: { firstName: string; lastName: string } })[]>;
+  createUserNote(note: InsertUserNote): Promise<UserNote>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -469,6 +476,24 @@ export class DatabaseStorage implements IStorage {
       const [result] = await db.insert(siteConfig).values(data).returning();
       return result;
     }
+  }
+
+  // User Notes
+  async getUserNotes(userId: string): Promise<(UserNote & { author?: { firstName: string; lastName: string } })[]> {
+    const notes = await db.select().from(userNotes).where(eq(userNotes.userId, userId)).orderBy(desc(userNotes.createdAt));
+    const notesWithAuthors = await Promise.all(notes.map(async (note) => {
+      const author = await this.getUser(note.authorId);
+      return {
+        ...note,
+        author: author ? { firstName: author.firstName, lastName: author.lastName } : undefined,
+      };
+    }));
+    return notesWithAuthors;
+  }
+
+  async createUserNote(note: InsertUserNote): Promise<UserNote> {
+    const [result] = await db.insert(userNotes).values(note).returning();
+    return result;
   }
 }
 

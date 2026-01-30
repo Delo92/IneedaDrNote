@@ -882,6 +882,109 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================================================
+  // SHARED USER PROFILE ENDPOINTS (Level 3+)
+  // ============================================================================
+
+  // Get user applications (for profile modal)
+  app.get("/api/users/:id/applications", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const apps = await storage.getApplicationsByUser(req.params.id);
+      const packages = await storage.getActivePackages();
+      const packagesMap = new Map(packages.map(p => [p.id, p]));
+      
+      const appsWithPackages = apps.map(app => ({
+        ...app,
+        package: app.packageId ? packagesMap.get(app.packageId) : undefined,
+      }));
+      
+      res.json(appsWithPackages);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get user basic info (for edit tracking display)
+  app.get("/api/users/:id/info", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+      res.json({ firstName: user.firstName, lastName: user.lastName });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update user profile with edit tracking (Level 3+)
+  app.put("/api/users/:id/profile", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const { userLevel, isActive, firstName, lastName, email, phone, dateOfBirth, address, city, state, zipCode } = req.body;
+      const updates: Record<string, any> = {
+        lastEditedBy: req.session.userId,
+        lastEditedAt: new Date(),
+      };
+      
+      // Level 3 can only edit profile data, not level/status
+      const currentUserLevel = (await storage.getUser(req.session.userId!))?.userLevel || 1;
+      
+      if (currentUserLevel >= 4) {
+        if (userLevel !== undefined) updates.userLevel = userLevel;
+        if (isActive !== undefined) updates.isActive = isActive;
+      }
+      
+      if (firstName !== undefined) updates.firstName = firstName;
+      if (lastName !== undefined) updates.lastName = lastName;
+      if (email !== undefined) updates.email = email;
+      if (phone !== undefined) updates.phone = phone;
+      if (dateOfBirth !== undefined) updates.dateOfBirth = dateOfBirth;
+      if (address !== undefined) updates.address = address;
+      if (city !== undefined) updates.city = city;
+      if (state !== undefined) updates.state = state;
+      if (zipCode !== undefined) updates.zipCode = zipCode;
+      
+      const user = await storage.updateUser(req.params.id, updates);
+      if (!user) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+      res.json({ ...user, passwordHash: undefined });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get user notes
+  app.get("/api/users/:id/notes", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const notes = await storage.getUserNotes(req.params.id);
+      res.json(notes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Add user note
+  app.post("/api/users/:id/notes", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const { content } = req.body;
+      if (!content || !content.trim()) {
+        res.status(400).json({ message: "Note content is required" });
+        return;
+      }
+      const note = await storage.createUserNote({
+        userId: req.params.id,
+        authorId: req.session.userId!,
+        content: content.trim(),
+      });
+      res.json(note);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // User management
   app.put("/api/admin/users/:id", requireAuth, requireLevel(4), async (req, res) => {
     try {
