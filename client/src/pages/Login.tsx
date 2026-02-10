@@ -50,7 +50,6 @@ export default function Login() {
     },
   });
 
-  // When level is selected, auto-fill email
   useEffect(() => {
     if (selectedLevel) {
       form.setValue("email", `level${selectedLevel}@test.com`);
@@ -67,25 +66,13 @@ export default function Login() {
         description: `Logged in as ${user.firstName} ${user.lastName}`,
       });
       
-      // Redirect based on user level
       switch (user.userLevel) {
-        case 1:
-          setLocation("/dashboard/applicant");
-          break;
-        case 2:
-          setLocation("/dashboard/reviewer");
-          break;
-        case 3:
-          setLocation("/dashboard/agent");
-          break;
-        case 4:
-          setLocation("/dashboard/admin");
-          break;
-        case 5:
-          setLocation("/dashboard/owner");
-          break;
-        default:
-          setLocation("/");
+        case 1: setLocation("/dashboard/applicant"); break;
+        case 2: setLocation("/dashboard/reviewer"); break;
+        case 3: setLocation("/dashboard/agent"); break;
+        case 4: setLocation("/dashboard/admin"); break;
+        case 5: setLocation("/dashboard/owner"); break;
+        default: setLocation("/");
       }
     } catch (error: any) {
       toast({
@@ -99,152 +86,160 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center py-12 px-4">
-      <div className="w-full max-w-md space-y-6">
-        <Button variant="ghost" asChild className="mb-4">
-          <Link href="/">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to home
-          </Link>
-        </Button>
+    <div className="flex flex-col">
+      <div className="py-8 border-b bg-[hsl(var(--section-bg))]">
+        <div className="container">
+          <h1 className="text-2xl font-bold">Sign In</h1>
+          <p className="text-sm text-muted-foreground mt-1">Access your account</p>
+        </div>
+      </div>
 
-        <Card>
-          <CardHeader className="text-center">
-            <div className="flex justify-center mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xl font-bold">
-                {config.siteName.charAt(0)}
+      <div className="flex items-center justify-center py-12 px-4">
+        <div className="w-full max-w-md space-y-6">
+          <Button variant="ghost" asChild className="mb-4" data-testid="button-back-home">
+            <Link href="/">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to home
+            </Link>
+          </Button>
+
+          <Card>
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-4">
+                <span className="text-2xl font-bold" style={{ fontFamily: 'var(--font-heading)', color: 'hsl(var(--heading-color))' }}>
+                  {config.siteName}
+                </span>
               </div>
-            </div>
-            <CardTitle className="text-2xl" data-testid="text-login-title">Welcome back</CardTitle>
-            <CardDescription>
-              Sign in to access your doctor's notes and orders
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                {/* Level Selector for Quick Login */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Quick Login (Test Accounts)</label>
-                  <Select value={selectedLevel} onValueChange={setSelectedLevel}>
-                    <SelectTrigger data-testid="select-login-level">
-                      <SelectValue placeholder="Select a level to auto-fill..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Level 1 - {getLevelName(1)}</SelectItem>
-                      <SelectItem value="2">Level 2 - {getLevelName(2)}</SelectItem>
-                      <SelectItem value="3">Level 3 - {getLevelName(3)}</SelectItem>
-                      <SelectItem value="4">Level 4 - {getLevelName(4)}</SelectItem>
-                      <SelectItem value="5">Level 5 - {getLevelName(5)}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Select a level to auto-fill test credentials
-                  </p>
-                </div>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
+              <CardTitle className="text-2xl" data-testid="text-login-title">Welcome back</CardTitle>
+              <CardDescription>
+                Sign in to access your doctor's notes and orders
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Quick Login (Test Accounts)</label>
+                    <Select value={selectedLevel} onValueChange={setSelectedLevel}>
+                      <SelectTrigger data-testid="select-login-level">
+                        <SelectValue placeholder="Select a level to auto-fill..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Level 1 - {getLevelName(1)}</SelectItem>
+                        <SelectItem value="2">Level 2 - {getLevelName(2)}</SelectItem>
+                        <SelectItem value="3">Level 3 - {getLevelName(3)}</SelectItem>
+                        <SelectItem value="4">Level 4 - {getLevelName(4)}</SelectItem>
+                        <SelectItem value="5">Level 5 - {getLevelName(5)}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Select a level to auto-fill test credentials
+                    </p>
                   </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">
-                      Or enter manually
-                    </span>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-card px-2 text-muted-foreground">
+                        Or enter manually
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="email"
-                          placeholder="you@example.com"
-                          autoComplete="email"
-                          data-testid="input-email"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center justify-between">
-                        <FormLabel>Password</FormLabel>
-                        <Link
-                          href="/forgot-password"
-                          className="text-sm text-primary hover:underline"
-                          data-testid="link-forgot-password"
-                        >
-                          Forgot password?
-                        </Link>
-                      </div>
-                      <FormControl>
-                        <div className="relative">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
                           <Input
-                            type={showPassword ? "text" : "password"}
-                            placeholder="Enter your password"
-                            autoComplete="current-password"
-                            data-testid="input-password"
+                            type="email"
+                            placeholder="you@example.com"
+                            autoComplete="email"
+                            data-testid="input-email"
                             {...field}
                           />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                            onClick={() => setShowPassword(!showPassword)}
-                            data-testid="button-toggle-password"
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center justify-between">
+                          <FormLabel>Password</FormLabel>
+                          <Link
+                            href="/forgot-password"
+                            className="text-sm text-primary hover:underline"
+                            data-testid="link-forgot-password"
                           >
-                            {showPassword ? (
-                              <EyeOff className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <Eye className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </Button>
+                            Forgot password?
+                          </Link>
                         </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormControl>
+                          <div className="relative">
+                            <Input
+                              type={showPassword ? "text" : "password"}
+                              placeholder="Enter your password"
+                              autoComplete="current-password"
+                              data-testid="input-password"
+                              {...field}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                              onClick={() => setShowPassword(!showPassword)}
+                              data-testid="button-toggle-password"
+                            >
+                              {showPassword ? (
+                                <EyeOff className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isLoading}
-                  data-testid="button-submit-login"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in...
-                    </>
-                  ) : (
-                    "Sign in"
-                  )}
-                </Button>
-              </form>
-            </Form>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isLoading}
+                    data-testid="button-submit-login"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : (
+                      "Sign in"
+                    )}
+                  </Button>
+                </form>
+              </Form>
 
-            <div className="mt-6 text-center text-sm">
-              <span className="text-muted-foreground">Don't have an account? </span>
-              <Link href="/register" className="text-primary hover:underline font-medium" data-testid="link-register">
-                Sign up
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="mt-6 text-center text-sm">
+                <span className="text-muted-foreground">Don't have an account? </span>
+                <Link href="/register" className="text-primary hover:underline font-medium" data-testid="link-register">
+                  Sign up
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

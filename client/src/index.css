@@ -2,65 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE */
+/* LIGHT MODE - MediLab Medical Blue Theme */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
 
-  /* Automatic computation of border around primary / danger buttons */
-  --opaque-button-border-intensity: -8; /* In terms of percentages */
+  --opaque-button-border-intensity: -8;
 
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
   --background: 0 0% 100%;
-  --foreground: 222 47% 11%;
+  --foreground: 0 0% 27%;
 
-  --border: 220 13% 91%;
+  --border: 210 18% 91%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 220 13% 91%;
+  --card-foreground: 0 0% 27%;
+  --card-border: 210 18% 91%;
 
-  --sidebar: 220 14% 96%;
-  --sidebar-foreground: 222 47% 11%;
-  --sidebar-border: 220 13% 91%;
-  --sidebar-primary: 221 83% 53%;
+  --sidebar: 207 38% 96%;
+  --sidebar-foreground: 207 38% 28%;
+  --sidebar-border: 210 18% 91%;
+  --sidebar-primary: 207 80% 45%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 14% 92%;
-  --sidebar-accent-foreground: 222 47% 11%;
-  --sidebar-ring: 221 83% 53%;
+  --sidebar-accent: 207 38% 92%;
+  --sidebar-accent-foreground: 207 38% 28%;
+  --sidebar-ring: 207 80% 45%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 220 13% 91%;
+  --popover-foreground: 0 0% 27%;
+  --popover-border: 210 18% 91%;
 
-  --primary: 221 83% 53%;
+  --primary: 207 80% 45%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 207 30% 96%;
+  --secondary-foreground: 207 38% 28%;
 
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 9% 46%;
+  --muted: 207 30% 96%;
+  --muted-foreground: 207 10% 46%;
 
-  --accent: 220 14% 96%;
-  --accent-foreground: 222 47% 11%;
+  --accent: 207 30% 96%;
+  --accent-foreground: 207 38% 28%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 220 13% 91%;
-  --ring: 221 83% 53%;
+  --input: 210 18% 91%;
+  --ring: 207 80% 45%;
   
-  --chart-1: 221 83% 53%;
+  --chart-1: 207 80% 45%;
   --chart-2: 142 71% 45%;
   --chart-3: 38 92% 50%;
   --chart-4: 280 67% 54%;
   --chart-5: 0 84% 60%;
 
-  --font-sans: 'Inter', sans-serif;
+  --section-bg: 207 60% 97%;
+  --heading-color: 207 38% 28%;
+
+  --font-sans: 'Roboto', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Poppins', sans-serif;
+  --font-nav: 'Raleway', sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: 'JetBrains Mono', monospace;
   --radius: .5rem;
@@ -75,7 +78,6 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  /* Automatically computed borders */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --sidebar-accent-border: hsl(var(--sidebar-accent));
@@ -98,51 +100,53 @@
 
   --opaque-button-border-intensity: 9;
 
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 222 47% 6%;
-  --foreground: 210 40% 98%;
+  --background: 210 30% 6%;
+  --foreground: 210 40% 92%;
 
-  --border: 217 33% 17%;
+  --border: 210 25% 17%;
 
-  --card: 222 47% 8%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 17%;
+  --card: 210 30% 9%;
+  --card-foreground: 210 40% 92%;
+  --card-border: 210 25% 17%;
 
-  --sidebar: 222 47% 7%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 217 91% 60%;
+  --sidebar: 210 30% 7%;
+  --sidebar-foreground: 210 40% 92%;
+  --sidebar-border: 210 25% 17%;
+  --sidebar-primary: 207 85% 55%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 217 33% 12%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 91% 60%;
+  --sidebar-accent: 210 25% 13%;
+  --sidebar-accent-foreground: 210 40% 92%;
+  --sidebar-ring: 207 85% 55%;
 
-  --popover: 222 47% 8%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 17%;
+  --popover: 210 30% 9%;
+  --popover-foreground: 210 40% 92%;
+  --popover-border: 210 25% 17%;
 
-  --primary: 217 91% 60%;
+  --primary: 207 85% 55%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 210 25% 17%;
+  --secondary-foreground: 210 40% 92%;
 
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 210 25% 17%;
+  --muted-foreground: 210 15% 60%;
 
-  --accent: 217 33% 17%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 210 25% 17%;
+  --accent-foreground: 210 40% 92%;
 
   --destructive: 0 62% 50%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 217 33% 17%;
-  --ring: 217 91% 60%;
+  --input: 210 25% 17%;
+  --ring: 207 85% 55%;
   
-  --chart-1: 217 91% 60%;
+  --section-bg: 210 30% 10%;
+  --heading-color: 210 40% 92%;
+
+  --chart-1: 207 85% 55%;
   --chart-2: 142 71% 45%;
   --chart-3: 38 92% 50%;
   --chart-4: 280 67% 54%;
@@ -166,20 +170,19 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    color: hsl(var(--heading-color));
+  }
 }
 
-/**
- * Using the elevate system.
- * Automatic contrast adjustment.
- */
 @layer utilities {
 
-  /* Hide ugly search cancel button in Chrome until we can style it properly */
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;
   }
 
-  /* Placeholder styling for contentEditable div */
   [contenteditable][data-placeholder]:empty::before {
     content: attr(data-placeholder);
     color: hsl(var(--muted-foreground));
@@ -189,9 +192,6 @@
   .no-default-hover-elevate {}
   .no-default-active-elevate {}
 
-  /**
-   * Toggleable backgrounds go behind the content. Hoverable/active goes on top.
-   */
   .toggle-elevate::before,
   .toggle-elevate-2::before {
     content: "";
@@ -210,7 +210,6 @@
     inset: -1px;
   }
 
-  /* Does not work on elements with overflow:hidden! */
   .hover-elevate:not(.no-default-hover-elevate),
   .active-elevate:not(.no-default-active-elevate),
   .hover-elevate-2:not(.no-default-hover-elevate),
@@ -247,5 +246,33 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+
+  .section-title-underline {
+    position: relative;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+  }
+  .section-title-underline::before {
+    content: "";
+    position: absolute;
+    display: block;
+    width: 160px;
+    height: 1px;
+    background: hsl(var(--muted-foreground) / 0.4);
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 1px;
+  }
+  .section-title-underline::after {
+    content: "";
+    position: absolute;
+    display: block;
+    width: 60px;
+    height: 3px;
+    background: hsl(var(--primary));
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 0;
   }
 }
