@@ -82,6 +82,7 @@ Role names are configurable per deployment via the `siteConfig` table.
 ### Backend Libraries
 - **Authentication**: bcryptjs for password hashing
 - **Sessions**: express-session with connect-pg-simple for PostgreSQL session store
+- **File Uploads**: multer for multipart form data (gallery image uploads stored in `uploads/gallery/`)
 
 ### Development Tools
 - **Replit Plugins**: @replit/vite-plugin-runtime-error-modal, cartographer, dev-banner
