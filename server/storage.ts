@@ -109,6 +109,7 @@ export interface IStorage {
 
   getCounter(collectionName: string): Promise<number>;
   initializeCounters(): Promise<void>;
+  initCollectionWithPlaceholder(collectionName: string, placeholderDoc: Record<string, any>): Promise<boolean>;
 
   getAdminSettings(): Promise<Record<string, any> | undefined>;
   updateAdminSettings(data: Record<string, any>): Promise<Record<string, any>>;
@@ -287,6 +288,16 @@ export class FirestoreStorage implements IStorage {
       }
     }
     await batch.commit();
+  }
+
+  async initCollectionWithPlaceholder(collectionName: string, placeholderDoc: Record<string, any>): Promise<boolean> {
+    const snap = await this.col(collectionName).limit(1).get();
+    if (!snap.empty) return false;
+    const id = `_placeholder_${randomUUID().slice(0, 8)}`;
+    await this.col(collectionName).doc(id).set(
+      cleanForFirestore({ ...placeholderDoc, _isPlaceholder: true, createdAt: FieldValue.serverTimestamp() })
+    );
+    return true;
   }
 
   // =========================================================================

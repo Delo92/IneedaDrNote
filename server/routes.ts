@@ -1501,6 +1501,38 @@ export async function registerRoutes(
         () => storage.createBlogPost({ title: "Welcome to Our Platform", content: "We are excited to launch our doctor's note service.", isPublished: true, authorId: "system" })
       );
 
+      // 8. Initialize ALL remaining collections with placeholder docs so they appear in Firestore
+      const remainingCollections: { name: string; doc: Record<string, any> }[] = [
+        { name: "approvals", doc: { type: "system_init", status: "placeholder" } },
+        { name: "errorLogs", doc: { level: "info", message: "Collection initialized", source: "seed" } },
+        { name: "documentStates", doc: { status: "initialized", description: "Collection initialized" } },
+        { name: "consultationHistory", doc: { type: "system_init", status: "placeholder" } },
+        { name: "formAssignments", doc: { type: "system_init", status: "placeholder" } },
+        { name: "workflowInstances", doc: { type: "system_init", status: "placeholder" } },
+        { name: "agentQueue", doc: { type: "system_init", status: "placeholder" } },
+        { name: "agentClockRecords", doc: { type: "system_init", status: "placeholder" } },
+        { name: "applicationStatus", doc: { type: "system_init", currentStep: 0, status: "placeholder" } },
+        { name: "stepData", doc: { type: "system_init", step: 0, status: "placeholder" } },
+        { name: "profileNotes", doc: { type: "system_init", note: "Collection initialized" } },
+        { name: "pushSubscriptions", doc: { type: "system_init", status: "placeholder" } },
+        { name: "chargebacks", doc: { type: "system_init", status: "placeholder", amount: 0 } },
+        { name: "referralCodeHistory", doc: { type: "system_init", status: "placeholder" } },
+        { name: "referralRegistrations", doc: { type: "system_init", status: "placeholder" } },
+        { name: "termsAcceptances", doc: { type: "system_init", status: "placeholder" } },
+        { name: "agentDocuments", doc: { type: "system_init", status: "placeholder" } },
+      ];
+
+      for (const col of remainingCollections) {
+        try {
+          const created = await storage.initCollectionWithPlaceholder(col.name, col.doc);
+          if (created) {
+            results.collections_initialized.push(col.name);
+          }
+        } catch (e: any) {
+          (results.errors as string[]).push(`Failed to init ${col.name}: ${e.message}`);
+        }
+      }
+
       res.json({
         success: true,
         message: "Firebase seed complete - all ChronicDocs collections initialized",
