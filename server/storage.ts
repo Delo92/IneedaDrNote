@@ -26,7 +26,7 @@ import {
   type UserNote,
   type InsertUserNote,
 } from "@shared/schema";
-import { firestore } from "./firebase-admin";
+import { getDb, FieldValue } from "./firebase-admin";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -108,27 +108,6 @@ export interface IStorage {
   createUserNote(note: InsertUserNote): Promise<UserNote>;
 }
 
-function toDate(val: any): Date | null {
-  if (!val) return null;
-  if (val instanceof Date) return val;
-  if (val.toDate && typeof val.toDate === "function") return val.toDate();
-  if (typeof val === "string" || typeof val === "number") return new Date(val);
-  return null;
-}
-
-function serializeForFirestore(data: Record<string, any>): Record<string, any> {
-  const result: Record<string, any> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (value === undefined) continue;
-    if (value instanceof Date) {
-      result[key] = value;
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
 function docToRecord(doc: FirebaseFirestore.DocumentSnapshot): Record<string, any> | undefined {
   if (!doc.exists) return undefined;
   const data = doc.data()!;
@@ -158,13 +137,22 @@ function docsToRecords(snapshot: FirebaseFirestore.QuerySnapshot): Record<string
   });
 }
 
+function cleanForFirestore(data: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue;
+    result[key] = value;
+  }
+  return result;
+}
+
 export class FirestoreStorage implements IStorage {
   private col(name: string) {
-    return firestore.collection(name);
+    return getDb().collection(name);
   }
 
   // =========================================================================
-  // USERS
+  // USERS - Firebase UID as document ID
   // =========================================================================
   async getUser(id: string): Promise<User | undefined> {
     const doc = await this.col("users").doc(id).get();
@@ -178,9 +166,13 @@ export class FirestoreStorage implements IStorage {
   }
 
   async getUserByFirebaseUid(firebaseUid: string): Promise<User | undefined> {
-    const snap = await this.col("users").where("firebaseUid", "==", firebaseUid).limit(1).get();
-    if (snap.empty) return undefined;
-    return docsToRecords(snap)[0] as User;
+    const doc = await this.col("users").doc(firebaseUid).get();
+    if (!doc.exists) {
+      const snap = await this.col("users").where("firebaseUid", "==", firebaseUid).limit(1).get();
+      if (snap.empty) return undefined;
+      return docsToRecords(snap)[0] as User;
+    }
+    return docToRecord(doc) as User;
   }
 
   async getUserByReferralCode(referralCode: string): Promise<User | undefined> {
@@ -190,25 +182,26 @@ export class FirestoreStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const now = new Date();
-    const userData = serializeForFirestore({
+    const id = insertUser.firebaseUid || randomUUID();
+    const userData = cleanForFirestore({
       ...insertUser,
       email: insertUser.email.toLowerCase(),
-      createdAt: now,
-      updatedAt: now,
+      firebaseUid: insertUser.firebaseUid || id,
       isActive: insertUser.isActive ?? true,
       userLevel: insertUser.userLevel ?? 1,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     await this.col("users").doc(id).set(userData);
-    return { id, ...userData } as User;
+    const created = await this.col("users").doc(id).get();
+    return docToRecord(created) as User;
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
     const ref = this.col("users").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+    const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
     await ref.update(updateData);
     const updated = await ref.get();
     return docToRecord(updated) as User;
@@ -234,8 +227,9 @@ export class FirestoreStorage implements IStorage {
   }
 
   async getAllPackages(): Promise<Package[]> {
-    const snap = await this.col("packages").orderBy("sortOrder", "asc").get();
-    return docsToRecords(snap) as Package[];
+    const snap = await this.col("packages").get();
+    const results = docsToRecords(snap) as Package[];
+    return results.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   }
 
   async getActivePackages(): Promise<Package[]> {
@@ -246,26 +240,26 @@ export class FirestoreStorage implements IStorage {
 
   async createPackage(insertPkg: InsertPackage): Promise<Package> {
     const id = randomUUID();
-    const now = new Date();
-    const pkgData = serializeForFirestore({
+    const pkgData = cleanForFirestore({
       ...insertPkg,
-      createdAt: now,
-      updatedAt: now,
       isActive: insertPkg.isActive ?? true,
       sortOrder: insertPkg.sortOrder ?? 0,
       requiredDocuments: insertPkg.requiredDocuments ?? [],
       formFields: insertPkg.formFields ?? [],
       workflowSteps: insertPkg.workflowSteps ?? ["Registration", "Payment", "Document Upload", "Review", "Approval", "Completed"],
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     await this.col("packages").doc(id).set(pkgData);
-    return { id, ...pkgData } as Package;
+    const created = await this.col("packages").doc(id).get();
+    return docToRecord(created) as Package;
   }
 
   async updatePackage(id: string, data: Partial<InsertPackage>): Promise<Package | undefined> {
     const ref = this.col("packages").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+    const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
     await ref.update(updateData);
     const updated = await ref.get();
     return docToRecord(updated) as Package;
@@ -306,27 +300,27 @@ export class FirestoreStorage implements IStorage {
 
   async createApplication(insertApp: InsertApplication): Promise<Application> {
     const id = randomUUID();
-    const now = new Date();
-    const appData = serializeForFirestore({
+    const appData = cleanForFirestore({
       ...insertApp,
-      createdAt: now,
-      updatedAt: now,
       status: insertApp.status ?? "pending",
       currentStep: insertApp.currentStep ?? 1,
       totalSteps: insertApp.totalSteps ?? 6,
       currentLevel: insertApp.currentLevel ?? 1,
       formData: insertApp.formData ?? {},
       paymentStatus: insertApp.paymentStatus ?? "unpaid",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     await this.col("applications").doc(id).set(appData);
-    return { id, ...appData } as Application;
+    const created = await this.col("applications").doc(id).get();
+    return docToRecord(created) as Application;
   }
 
   async updateApplication(id: string, data: Partial<InsertApplication>): Promise<Application | undefined> {
     const ref = this.col("applications").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+    const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
     await ref.update(updateData);
     const updated = await ref.get();
     return docToRecord(updated) as Application;
@@ -343,23 +337,23 @@ export class FirestoreStorage implements IStorage {
 
   async createApplicationStep(step: InsertApplicationStep): Promise<ApplicationStep> {
     const id = randomUUID();
-    const now = new Date();
-    const stepData = serializeForFirestore({
+    const stepData = cleanForFirestore({
       ...step,
-      createdAt: now,
-      updatedAt: now,
       status: step.status ?? "pending",
       stepData: step.stepData ?? {},
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     await this.col("applicationSteps").doc(id).set(stepData);
-    return { id, ...stepData } as ApplicationStep;
+    const created = await this.col("applicationSteps").doc(id).get();
+    return docToRecord(created) as ApplicationStep;
   }
 
   async updateApplicationStep(id: string, data: Partial<InsertApplicationStep>): Promise<ApplicationStep | undefined> {
     const ref = this.col("applicationSteps").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+    const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
     await ref.update(updateData);
     const updated = await ref.get();
     return docToRecord(updated) as ApplicationStep;
@@ -387,22 +381,22 @@ export class FirestoreStorage implements IStorage {
 
   async createDocument(doc: InsertDocument): Promise<Document> {
     const id = randomUUID();
-    const now = new Date();
-    const docData = serializeForFirestore({
+    const docData = cleanForFirestore({
       ...doc,
-      createdAt: now,
-      updatedAt: now,
       status: doc.status ?? "pending",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     await this.col("documents").doc(id).set(docData);
-    return { id, ...docData } as Document;
+    const created = await this.col("documents").doc(id).get();
+    return docToRecord(created) as Document;
   }
 
   async updateDocument(id: string, data: Partial<InsertDocument>): Promise<Document | undefined> {
     const ref = this.col("documents").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+    const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
     await ref.update(updateData);
     const updated = await ref.get();
     return docToRecord(updated) as Document;
@@ -461,21 +455,21 @@ export class FirestoreStorage implements IStorage {
 
   async createMessage(msg: InsertMessage): Promise<Message> {
     const id = randomUUID();
-    const now = new Date();
-    const msgData = serializeForFirestore({
+    const msgData = cleanForFirestore({
       ...msg,
-      createdAt: now,
       isRead: msg.isRead ?? false,
+      createdAt: FieldValue.serverTimestamp(),
     });
     await this.col("messages").doc(id).set(msgData);
-    return { id, ...msgData } as Message;
+    const created = await this.col("messages").doc(id).get();
+    return docToRecord(created) as Message;
   }
 
   async markMessageAsRead(id: string): Promise<Message | undefined> {
     const ref = this.col("messages").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    await ref.update({ isRead: true, readAt: new Date() });
+    await ref.update({ isRead: true, readAt: FieldValue.serverTimestamp() });
     const updated = await ref.get();
     return docToRecord(updated) as Message;
   }
@@ -524,24 +518,24 @@ export class FirestoreStorage implements IStorage {
 
   async createQueueEntry(entry: InsertQueueEntry): Promise<QueueEntry> {
     const id = randomUUID();
-    const now = new Date();
-    const entryData = serializeForFirestore({
+    const entryData = cleanForFirestore({
       ...entry,
-      createdAt: now,
-      updatedAt: now,
       status: entry.status ?? "waiting",
       queueType: entry.queueType ?? "consultation",
       priority: entry.priority ?? 0,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     await this.col("queueEntries").doc(id).set(entryData);
-    return { id, ...entryData } as QueueEntry;
+    const created = await this.col("queueEntries").doc(id).get();
+    return docToRecord(created) as QueueEntry;
   }
 
   async updateQueueEntry(id: string, data: Partial<InsertQueueEntry>): Promise<QueueEntry | undefined> {
     const ref = this.col("queueEntries").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+    const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
     await ref.update(updateData);
     const updated = await ref.get();
     return docToRecord(updated) as QueueEntry;
@@ -574,23 +568,23 @@ export class FirestoreStorage implements IStorage {
 
   async createPayment(payment: InsertPayment): Promise<Payment> {
     const id = randomUUID();
-    const now = new Date();
-    const paymentData = serializeForFirestore({
+    const paymentData = cleanForFirestore({
       ...payment,
-      createdAt: now,
-      updatedAt: now,
       status: payment.status ?? "pending",
       metadata: payment.metadata ?? {},
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     await this.col("payments").doc(id).set(paymentData);
-    return { id, ...paymentData } as Payment;
+    const created = await this.col("payments").doc(id).get();
+    return docToRecord(created) as Payment;
   }
 
   async updatePayment(id: string, data: Partial<InsertPayment>): Promise<Payment | undefined> {
     const ref = this.col("payments").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+    const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
     await ref.update(updateData);
     const updated = await ref.get();
     return docToRecord(updated) as Payment;
@@ -617,22 +611,22 @@ export class FirestoreStorage implements IStorage {
 
   async createCommission(commission: InsertCommission): Promise<Commission> {
     const id = randomUUID();
-    const now = new Date();
-    const commData = serializeForFirestore({
+    const commData = cleanForFirestore({
       ...commission,
-      createdAt: now,
-      updatedAt: now,
       status: commission.status ?? "pending",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     await this.col("commissions").doc(id).set(commData);
-    return { id, ...commData } as Commission;
+    const created = await this.col("commissions").doc(id).get();
+    return docToRecord(created) as Commission;
   }
 
   async updateCommission(id: string, data: Partial<InsertCommission>): Promise<Commission | undefined> {
     const ref = this.col("commissions").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+    const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
     await ref.update(updateData);
     const updated = await ref.get();
     return docToRecord(updated) as Commission;
@@ -658,35 +652,36 @@ export class FirestoreStorage implements IStorage {
 
   async createNotification(notification: InsertNotification): Promise<Notification> {
     const id = randomUUID();
-    const now = new Date();
-    const notifData = serializeForFirestore({
+    const notifData = cleanForFirestore({
       ...notification,
-      createdAt: now,
       isRead: notification.isRead ?? false,
       type: notification.type ?? "info",
       metadata: notification.metadata ?? {},
+      createdAt: FieldValue.serverTimestamp(),
     });
     await this.col("notifications").doc(id).set(notifData);
-    return { id, ...notifData } as Notification;
+    const created = await this.col("notifications").doc(id).get();
+    return docToRecord(created) as Notification;
   }
 
   async markNotificationAsRead(id: string): Promise<Notification | undefined> {
     const ref = this.col("notifications").doc(id);
     const existing = await ref.get();
     if (!existing.exists) return undefined;
-    await ref.update({ isRead: true, readAt: new Date() });
+    await ref.update({ isRead: true, readAt: FieldValue.serverTimestamp() });
     const updated = await ref.get();
     return docToRecord(updated) as Notification;
   }
 
   async markAllNotificationsAsRead(userId: string): Promise<void> {
+    const db = getDb();
     const snap = await this.col("notifications")
       .where("userId", "==", userId)
       .where("isRead", "==", false)
       .get();
-    const batch = firestore.batch();
+    const batch = db.batch();
     snap.docs.forEach(doc => {
-      batch.update(doc.ref, { isRead: true, readAt: new Date() });
+      batch.update(doc.ref, { isRead: true, readAt: FieldValue.serverTimestamp() });
     });
     await batch.commit();
   }
@@ -696,14 +691,14 @@ export class FirestoreStorage implements IStorage {
   // =========================================================================
   async createActivityLog(log: InsertActivityLog): Promise<ActivityLog> {
     const id = randomUUID();
-    const now = new Date();
-    const logData = serializeForFirestore({
+    const logData = cleanForFirestore({
       ...log,
-      createdAt: now,
       details: log.details ?? {},
+      createdAt: FieldValue.serverTimestamp(),
     });
     await this.col("activityLogs").doc(id).set(logData);
-    return { id, ...logData } as ActivityLog;
+    const created = await this.col("activityLogs").doc(id).get();
+    return docToRecord(created) as ActivityLog;
   }
 
   async getActivityLogs(limit: number = 100): Promise<ActivityLog[]> {
@@ -724,20 +719,20 @@ export class FirestoreStorage implements IStorage {
     const existing = await this.getSiteConfig();
     if (existing) {
       const ref = this.col("siteConfig").doc(existing.id);
-      const updateData = serializeForFirestore({ ...data, updatedAt: new Date() });
+      const updateData = cleanForFirestore({ ...data, updatedAt: FieldValue.serverTimestamp() });
       await ref.update(updateData);
       const updated = await ref.get();
       return docToRecord(updated) as SiteConfig;
     } else {
-      const id = randomUUID();
-      const now = new Date();
-      const configData = serializeForFirestore({
+      const id = "default";
+      const configData = cleanForFirestore({
         ...data,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
       await this.col("siteConfig").doc(id).set(configData);
-      return { id, ...configData } as SiteConfig;
+      const created = await this.col("siteConfig").doc(id).get();
+      return docToRecord(created) as SiteConfig;
     }
   }
 
@@ -760,13 +755,13 @@ export class FirestoreStorage implements IStorage {
 
   async createUserNote(note: InsertUserNote): Promise<UserNote> {
     const id = randomUUID();
-    const now = new Date();
-    const noteData = serializeForFirestore({
+    const noteData = cleanForFirestore({
       ...note,
-      createdAt: now,
+      createdAt: FieldValue.serverTimestamp(),
     });
     await this.col("userNotes").doc(id).set(noteData);
-    return { id, ...noteData } as UserNote;
+    const created = await this.col("userNotes").doc(id).get();
+    return docToRecord(created) as UserNote;
   }
 }
 

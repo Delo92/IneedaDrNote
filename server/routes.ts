@@ -8,7 +8,7 @@ import { defaultConfig } from "@shared/config";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { firebaseStorage, firebaseAuth } from "./firebase-admin";
+import { firebaseStorage, firebaseAuth, getAdminAuth } from "./firebase-admin";
 
 const memoryUpload = multer({
   storage: multer.memoryStorage(),
@@ -23,34 +23,103 @@ const memoryUpload = multer({
   },
 });
 
-// Session augmentation
 declare module "express-session" {
   interface SessionData {
     userId: string;
     userLevel: number;
+    firebaseUid: string;
   }
 }
 
-// Auth middleware
-function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        username: string;
+        firstName: string;
+        lastName: string;
+        userLevel: number;
+        email: string;
+        firebaseUid: string;
+      };
+    }
   }
-  next();
 }
+
+const isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const idToken = authHeader.split('Bearer ')[1];
+      const decodedToken = await getAdminAuth().verifyIdToken(idToken);
+
+      let user = await storage.getUserByFirebaseUid(decodedToken.uid);
+
+      if (!user && decodedToken.email) {
+        user = await storage.getUserByEmail(decodedToken.email);
+        if (user) {
+          await storage.updateUser(user.id, { firebaseUid: decodedToken.uid });
+          user = (await storage.getUser(user.id))!;
+        }
+      }
+
+      if (user) {
+        req.user = {
+          id: user.id,
+          username: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          userLevel: user.userLevel,
+          email: user.email,
+          firebaseUid: decodedToken.uid,
+        };
+        req.session.userId = user.id;
+        req.session.userLevel = user.userLevel;
+        req.session.firebaseUid = decodedToken.uid;
+        return next();
+      }
+    }
+
+    if (req.session.userId) {
+      const user = await storage.getUser(req.session.userId);
+      if (user) {
+        req.user = {
+          id: user.id,
+          username: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          userLevel: user.userLevel,
+          email: user.email,
+          firebaseUid: user.firebaseUid || user.id,
+        };
+        return next();
+      }
+    }
+
+    res.status(401).json({ message: "Unauthorized - Firebase ID token required" });
+  } catch (error) {
+    console.error("Auth middleware error:", error);
+    res.status(401).json({ message: "Unauthorized - Firebase authentication failed" });
+  }
+};
+
+const requireAuth = isAuthenticated;
 
 function requireLevel(minLevel: number) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session.userId || !req.session.userLevel) {
-      res.status(401).json({ message: "Unauthorized" });
-      return;
-    }
-    if (req.session.userLevel < minLevel) {
-      res.status(403).json({ message: "Forbidden - Insufficient permissions" });
-      return;
-    }
-    next();
+  return async (req: Request, res: Response, next: NextFunction) => {
+    await isAuthenticated(req, res, () => {
+      if (!req.user) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
+      }
+      if (req.user.userLevel < minLevel) {
+        res.status(403).json({ message: "Forbidden - Insufficient permissions" });
+        return;
+      }
+      next();
+    });
   };
 }
 
@@ -124,28 +193,24 @@ export async function registerRoutes(
 
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, firstName, lastName, phone, referralCode } = req.body;
+      const { email, password, firstName, lastName, phone, referralCode, firebaseUid } = req.body;
 
       if (!email || !password || !firstName || !lastName) {
         res.status(400).json({ message: "Missing required fields" });
         return;
       }
 
-      // Check if user already exists
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
         res.status(400).json({ message: "Email already registered" });
         return;
       }
 
-      // Hash password
       const passwordHash = await bcrypt.hash(password, 10);
 
-      // Generate unique profile ID and referral code
       const profileId = randomBytes(4).toString("hex").toUpperCase();
       const userReferralCode = randomBytes(4).toString("hex").toUpperCase();
 
-      // Check for referral
       let referredByUserId: string | undefined;
       if (referralCode) {
         const referrer = await storage.getUserByReferralCode(referralCode);
@@ -154,14 +219,14 @@ export async function registerRoutes(
         }
       }
 
-      // Create user
       const user = await storage.createUser({
         email,
         passwordHash,
         firstName,
         lastName,
         phone,
-        userLevel: 1, // Default to applicant
+        firebaseUid: firebaseUid || null,
+        userLevel: 1,
         profileId,
         referralCode: userReferralCode,
         referredByUserId,
@@ -337,24 +402,42 @@ export async function registerRoutes(
   });
 
   app.get("/api/auth/me", async (req, res) => {
-    if (!req.session.userId) {
+    try {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const idToken = authHeader.split('Bearer ')[1];
+        const decodedToken = await getAdminAuth().verifyIdToken(idToken);
+
+        let user = await storage.getUserByFirebaseUid(decodedToken.uid);
+        if (!user && decodedToken.email) {
+          user = await storage.getUserByEmail(decodedToken.email);
+          if (user) {
+            await storage.updateUser(user.id, { firebaseUid: decodedToken.uid });
+            user = (await storage.getUser(user.id))!;
+          }
+        }
+
+        if (user) {
+          req.session.userId = user.id;
+          req.session.userLevel = user.userLevel;
+          req.session.firebaseUid = decodedToken.uid;
+          res.json({ user: { ...user, passwordHash: undefined } });
+          return;
+        }
+      }
+
+      if (req.session.userId) {
+        const user = await storage.getUser(req.session.userId);
+        if (user) {
+          res.json({ user: { ...user, passwordHash: undefined } });
+          return;
+        }
+      }
+
       res.status(401).json({ message: "Not authenticated" });
-      return;
+    } catch (error) {
+      res.status(401).json({ message: "Not authenticated" });
     }
-
-    const user = await storage.getUser(req.session.userId);
-    if (!user) {
-      req.session.destroy(() => {});
-      res.status(401).json({ message: "User not found" });
-      return;
-    }
-
-    res.json({
-      user: {
-        ...user,
-        passwordHash: undefined,
-      },
-    });
   });
 
   // ===========================================================================
@@ -439,7 +522,7 @@ export async function registerRoutes(
 
   app.get("/api/applications", requireAuth, async (req, res) => {
     try {
-      const applications = await storage.getApplicationsByUser(req.session.userId!);
+      const applications = await storage.getApplicationsByUser(req.user!.id);
       res.json(applications);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -454,7 +537,7 @@ export async function registerRoutes(
         return;
       }
       // Check ownership or admin access
-      if (application.userId !== req.session.userId && req.session.userLevel! < 4) {
+      if (application.userId !== req.user!.id && req.user!.userLevel < 4) {
         res.status(403).json({ message: "Forbidden" });
         return;
       }
@@ -477,7 +560,7 @@ export async function registerRoutes(
       const workflowSteps = (pkg.workflowSteps as string[]) || defaultConfig.workflowSteps;
 
       const application = await storage.createApplication({
-        userId: req.session.userId!,
+        userId: req.user!.id,
         packageId,
         currentStep: 1,
         totalSteps: workflowSteps.length,
@@ -544,24 +627,23 @@ export async function registerRoutes(
       
       // Check if user already in queue
       const existing = await storage.getWaitingQueueEntries();
-      const alreadyInQueue = existing.find(e => e.applicantId === req.session.userId && e.status === "waiting");
+      const alreadyInQueue = existing.find(e => e.applicantId === req.user!.id && e.status === "waiting");
       if (alreadyInQueue) {
         res.status(400).json({ message: "You are already in the queue", queueEntry: alreadyInQueue });
         return;
       }
 
       // Get user info for denormalized fields
-      const user = await storage.getUser(req.session.userId!);
+      const user = await storage.getUser(req.user!.id);
       let pkg = null;
       if (packageId) {
         pkg = await storage.getPackage(packageId);
       }
 
-      // Calculate position
       const position = existing.length + 1;
 
       const entry = await storage.createQueueEntry({
-        applicantId: req.session.userId!,
+        applicantId: req.user!.id,
         packageId,
         applicationId,
         applicantPhone: phone,
@@ -585,7 +667,7 @@ export async function registerRoutes(
   app.get("/api/queue/my-status", requireAuth, async (req, res) => {
     try {
       const entries = await storage.getWaitingQueueEntries();
-      const myEntry = entries.find(e => e.applicantId === req.session.userId);
+      const myEntry = entries.find(e => e.applicantId === req.user!.id);
       if (!myEntry) {
         res.json({ inQueue: false });
         return;
@@ -601,7 +683,7 @@ export async function registerRoutes(
   app.post("/api/queue/leave", requireAuth, async (req, res) => {
     try {
       const entries = await storage.getWaitingQueueEntries();
-      const myEntry = entries.find(e => e.applicantId === req.session.userId && e.status === "waiting");
+      const myEntry = entries.find(e => e.applicantId === req.user!.id && e.status === "waiting");
       if (!myEntry) {
         res.status(404).json({ message: "Not in queue" });
         return;
@@ -626,7 +708,7 @@ export async function registerRoutes(
         return;
       }
       const updated = await storage.updateQueueEntry(req.params.id, {
-        reviewerId: req.session.userId!,
+        reviewerId: req.user!.id,
         status: "claimed",
         claimedAt: new Date(),
       });
@@ -644,7 +726,7 @@ export async function registerRoutes(
         res.status(404).json({ message: "Queue entry not found" });
         return;
       }
-      if (entry.reviewerId !== req.session.userId) {
+      if (entry.reviewerId !== req.user!.id) {
         res.status(403).json({ message: "This caller is not assigned to you" });
         return;
       }
@@ -671,7 +753,7 @@ export async function registerRoutes(
         res.status(404).json({ message: "Queue entry not found" });
         return;
       }
-      if (entry.reviewerId !== req.session.userId) {
+      if (entry.reviewerId !== req.user!.id) {
         res.status(403).json({ message: "This caller is not assigned to you" });
         return;
       }
@@ -683,17 +765,15 @@ export async function registerRoutes(
         outcome,
       });
       
-      // Update the application status based on outcome
       if (entry.applicationId) {
         if (outcome === "approved") {
-          // Move to Level 3 work queue
           await storage.updateApplication(entry.applicationId, {
             status: "level3_work",
             currentLevel: 3,
             level2Notes: notes,
             level2ApprovedAt: new Date(),
-            level2ApprovedBy: req.session.userId,
-            assignedReviewerId: req.session.userId,
+            level2ApprovedBy: req.user!.id,
+            assignedReviewerId: req.user!.id,
           });
         } else if (outcome === "denied") {
           await storage.updateApplication(entry.applicationId, {
@@ -701,7 +781,7 @@ export async function registerRoutes(
             currentLevel: 2,
             level2Notes: notes,
             rejectedAt: new Date(),
-            rejectedBy: req.session.userId,
+            rejectedBy: req.user!.id,
             rejectionReason: notes,
           });
         }
@@ -721,7 +801,7 @@ export async function registerRoutes(
         res.status(404).json({ message: "Queue entry not found" });
         return;
       }
-      if (entry.reviewerId !== req.session.userId) {
+      if (entry.reviewerId !== req.user!.id) {
         res.status(403).json({ message: "This caller is not assigned to you" });
         return;
       }
@@ -742,11 +822,11 @@ export async function registerRoutes(
 
   app.get("/api/commissions", requireAuth, async (req, res) => {
     try {
-      if (req.session.userLevel! >= 4) {
+      if (req.user!.userLevel >= 4) {
         const commissions = await storage.getAllCommissions();
         res.json(commissions);
       } else {
-        const commissions = await storage.getCommissionsByAgent(req.session.userId!);
+        const commissions = await storage.getCommissionsByAgent(req.user!.id);
         res.json(commissions);
       }
     } catch (error: any) {
@@ -773,13 +853,12 @@ export async function registerRoutes(
     try {
       const allApps = await storage.getApplicationsByStatus("level3_work");
       const waiting = allApps.filter(a => !a.assignedAgentId).length;
-      const inProgress = allApps.filter(a => a.assignedAgentId === req.session.userId).length;
+      const inProgress = allApps.filter(a => a.assignedAgentId === req.user!.id).length;
       
-      // Get all completions by this agent (level4_verification + completed)
       const pendingVerification = await storage.getApplicationsByStatus("level4_verification");
       const completedApps = await storage.getApplicationsByStatus("completed");
       const allCompleted = [...pendingVerification, ...completedApps];
-      const completedTotal = allCompleted.filter(a => a.level3CompletedBy === req.session.userId).length;
+      const completedTotal = allCompleted.filter(a => a.level3CompletedBy === req.user!.id).length;
       
       res.json({ waiting, inProgress, completedTotal });
     } catch (error: any) {
@@ -794,7 +873,7 @@ export async function registerRoutes(
       const pendingVerification = await storage.getApplicationsByStatus("level4_verification");
       const completedApps = await storage.getApplicationsByStatus("completed");
       const allCompleted = [...pendingVerification, ...completedApps];
-      const myCompleted = allCompleted.filter(a => a.level3CompletedBy === req.session.userId);
+      const myCompleted = allCompleted.filter(a => a.level3CompletedBy === req.user!.id);
       res.json(myCompleted);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -818,7 +897,7 @@ export async function registerRoutes(
         return;
       }
       const updated = await storage.updateApplication(req.params.id, {
-        assignedAgentId: req.session.userId,
+        assignedAgentId: req.user!.id,
       });
       res.json(updated);
     } catch (error: any) {
@@ -835,7 +914,7 @@ export async function registerRoutes(
         res.status(404).json({ message: "Application not found" });
         return;
       }
-      if (app.assignedAgentId !== req.session.userId) {
+      if (app.assignedAgentId !== req.user!.id) {
         res.status(403).json({ message: "This application is not assigned to you" });
         return;
       }
@@ -844,7 +923,7 @@ export async function registerRoutes(
         currentLevel: 4,
         level3Notes: notes,
         level3CompletedAt: new Date(),
-        level3CompletedBy: req.session.userId,
+        level3CompletedBy: req.user!.id,
       });
       res.json(updated);
     } catch (error: any) {
@@ -877,7 +956,7 @@ export async function registerRoutes(
       today.setHours(0, 0, 0, 0);
       const completedApps = await storage.getApplicationsByStatus("completed");
       const completedToday = completedApps.filter(a => 
-        a.level4VerifiedBy === req.session.userId && 
+        a.level4VerifiedBy === req.user!.id && 
         a.level4VerifiedAt && new Date(a.level4VerifiedAt) >= today
       ).length;
       
@@ -907,9 +986,9 @@ export async function registerRoutes(
           currentLevel: 5,
           level4Notes: notes,
           level4VerifiedAt: new Date(),
-          level4VerifiedBy: req.session.userId,
+          level4VerifiedBy: req.user!.id,
           approvedAt: new Date(),
-          approvedBy: req.session.userId,
+          approvedBy: req.user!.id,
           completedAt: new Date(),
         });
         res.json(updated);
@@ -1123,12 +1202,12 @@ export async function registerRoutes(
     try {
       const { userLevel, isActive, firstName, lastName, email, phone, dateOfBirth, address, city, state, zipCode } = req.body;
       const updates: Record<string, any> = {
-        lastEditedBy: req.session.userId,
+        lastEditedBy: req.user!.id,
         lastEditedAt: new Date(),
       };
       
       // Level 3 can only edit profile data, not level/status
-      const currentUserLevel = (await storage.getUser(req.session.userId!))?.userLevel || 1;
+      const currentUserLevel = req.user!.userLevel;
       
       if (currentUserLevel >= 4) {
         if (userLevel !== undefined) updates.userLevel = userLevel;
@@ -1176,7 +1255,7 @@ export async function registerRoutes(
       }
       const note = await storage.createUserNote({
         userId: req.params.id,
-        authorId: req.session.userId!,
+        authorId: req.user!.id,
         content: content.trim(),
       });
       res.json(note);
