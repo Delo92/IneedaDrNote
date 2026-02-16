@@ -661,10 +661,11 @@ export class FirestoreStorage implements IStorage {
     today.setHours(0, 0, 0, 0);
     const snap = await this.col("queueEntries")
       .where("status", "==", "completed")
-      .where("completedAt", ">=", today)
       .get();
     const results = docsToRecords(snap) as QueueEntry[];
-    return results.sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime());
+    return results
+      .filter(r => r.completedAt && new Date(r.completedAt).getTime() >= today.getTime())
+      .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime());
   }
 
   async getQueueEntriesByReviewer(reviewerId: string): Promise<QueueEntry[]> {
