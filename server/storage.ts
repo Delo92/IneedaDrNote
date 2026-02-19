@@ -213,6 +213,16 @@ export interface IStorage {
   createAutoMessageTrigger(data: Record<string, any>): Promise<Record<string, any>>;
   updateAutoMessageTrigger(id: string, data: Record<string, any>): Promise<Record<string, any> | undefined>;
   deleteAutoMessageTrigger(id: string): Promise<boolean>;
+
+  getDoctorReviewToken(id: string): Promise<Record<string, any> | undefined>;
+  getDoctorReviewTokenByToken(token: string): Promise<Record<string, any> | undefined>;
+  getDoctorReviewTokensByDoctor(doctorId: string): Promise<Record<string, any>[]>;
+  getDoctorReviewTokensByApplication(applicationId: string): Promise<Record<string, any>[]>;
+  createDoctorReviewToken(data: Record<string, any>): Promise<Record<string, any>>;
+  updateDoctorReviewToken(id: string, data: Record<string, any>): Promise<Record<string, any> | undefined>;
+
+  getNextDoctorForAssignment(): Promise<Record<string, any> | undefined>;
+  getActiveDoctors(): Promise<Record<string, any>[]>;
 }
 
 function docToRecord(doc: FirebaseFirestore.DocumentSnapshot): Record<string, any> | undefined {
@@ -1591,6 +1601,81 @@ export class FirestoreStorage implements IStorage {
   async deleteAutoMessageTrigger(id: string): Promise<boolean> {
     await this.col("autoMessageTriggers").doc(id).delete();
     return true;
+  }
+
+  async getDoctorReviewToken(id: string): Promise<Record<string, any> | undefined> {
+    const doc = await this.col("doctorReviewTokens").doc(id).get();
+    return docToRecord(doc);
+  }
+
+  async getDoctorReviewTokenByToken(token: string): Promise<Record<string, any> | undefined> {
+    const snap = await this.col("doctorReviewTokens").where("token", "==", token).limit(1).get();
+    if (snap.empty) return undefined;
+    return docsToRecords(snap)[0];
+  }
+
+  async getDoctorReviewTokensByDoctor(doctorId: string): Promise<Record<string, any>[]> {
+    const snap = await this.col("doctorReviewTokens").where("doctorId", "==", doctorId).get();
+    const results = docsToRecords(snap);
+    return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async getDoctorReviewTokensByApplication(applicationId: string): Promise<Record<string, any>[]> {
+    const snap = await this.col("doctorReviewTokens").where("applicationId", "==", applicationId).get();
+    return docsToRecords(snap);
+  }
+
+  async createDoctorReviewToken(data: Record<string, any>): Promise<Record<string, any>> {
+    const id = randomUUID();
+    const tokenData = cleanForFirestore({
+      ...data,
+      status: data.status ?? "pending",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    await this.col("doctorReviewTokens").doc(id).set(tokenData);
+    await this.incrementCounter("doctorReviewTokens");
+    const created = await this.col("doctorReviewTokens").doc(id).get();
+    return docToRecord(created)!;
+  }
+
+  async updateDoctorReviewToken(id: string, data: Record<string, any>): Promise<Record<string, any> | undefined> {
+    const ref = this.col("doctorReviewTokens").doc(id);
+    const existing = await ref.get();
+    if (!existing.exists) return undefined;
+    await ref.update(cleanForFirestore(data));
+    const updated = await ref.get();
+    return docToRecord(updated);
+  }
+
+  async getNextDoctorForAssignment(): Promise<Record<string, any> | undefined> {
+    const doctors = await this.getActiveDoctors();
+    if (doctors.length === 0) return undefined;
+
+    const settings = await this.getAdminSettings();
+    const lastAssignedDoctorId = settings?.lastAssignedDoctorId || null;
+
+    if (!lastAssignedDoctorId) {
+      await this.updateAdminSettings({ lastAssignedDoctorId: doctors[0].userId });
+      return doctors[0];
+    }
+
+    const lastIndex = doctors.findIndex(d => d.userId === lastAssignedDoctorId);
+    const nextIndex = (lastIndex + 1) % doctors.length;
+    const nextDoctor = doctors[nextIndex];
+
+    await this.updateAdminSettings({ lastAssignedDoctorId: nextDoctor.userId });
+    return nextDoctor;
+  }
+
+  async getActiveDoctors(): Promise<Record<string, any>[]> {
+    const snap = await this.col("doctorProfiles").get();
+    const profiles = docsToRecords(snap);
+    const active = profiles.filter(p => !p._isPlaceholder && p.isActive !== false);
+    return active.sort((a, b) => {
+      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return aDate - bDate;
+    });
   }
 }
 

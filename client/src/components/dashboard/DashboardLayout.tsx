@@ -71,7 +71,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       case 2: // Doctor
         return [
           { title: "Dashboard", href: "/dashboard/doctor", icon: Home },
-          { title: "Review Queue", href: "/dashboard/doctor/queue", icon: ClipboardList },
           { title: "Completed", href: "/dashboard/doctor/completed", icon: UserCheck },
           { title: "Referrals", href: "/dashboard/doctor/referrals", icon: Users },
           { title: "Commissions", href: "/dashboard/doctor/commissions", icon: DollarSign },
@@ -81,7 +80,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       case 3: // Admin
         return [
           { title: "Dashboard", href: "/dashboard/admin", icon: Home },
-          { title: "Verification Queue", href: "/dashboard/admin/queue", icon: ClipboardList },
+          { title: "Orders", href: "/dashboard/admin/applications", icon: ClipboardList },
           { title: "Users", href: "/dashboard/admin/users", icon: Users },
           { title: "Note Types", href: "/dashboard/admin/packages", icon: Building2 },
           { title: "Payments", href: "/dashboard/admin/payments", icon: CreditCard },

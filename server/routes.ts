@@ -1549,6 +1549,307 @@ export async function registerRoutes(
   });
 
   // ===========================================================================
+  // DOCTOR REVIEW TOKEN SYSTEM
+  // ===========================================================================
+
+  app.get("/api/doctors", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const doctors = await storage.getActiveDoctors();
+      const doctorsWithUsers = await Promise.all(
+        doctors.map(async (doc) => {
+          const user = doc.userId ? await storage.getUser(doc.userId) : null;
+          return {
+            ...doc,
+            firstName: user?.firstName,
+            lastName: user?.lastName,
+            email: user?.email,
+          };
+        })
+      );
+      res.json(doctorsWithUsers);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/doctors/stats", requireAuth, requireLevel(2), async (req, res) => {
+    try {
+      const doctorId = req.query.doctorId as string || req.user!.id;
+      const tokens = await storage.getDoctorReviewTokensByDoctor(doctorId);
+      const approved = tokens.filter(t => t.status === "approved").length;
+      const denied = tokens.filter(t => t.status === "denied").length;
+      const pending = tokens.filter(t => t.status === "pending").length;
+      res.json({ total: tokens.length, approved, denied, pending, tokens });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/applications/:id/send-to-doctor", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const applicationId = req.params.id as string;
+      const { doctorId: manualDoctorId } = req.body;
+
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        res.status(404).json({ message: "Application not found" });
+        return;
+      }
+
+      let doctor;
+      if (manualDoctorId) {
+        doctor = await storage.getDoctorProfile(manualDoctorId);
+        if (!doctor) {
+          const allDoctors = await storage.getActiveDoctors();
+          doctor = allDoctors.find(d => d.userId === manualDoctorId);
+        }
+      } else {
+        doctor = await storage.getNextDoctorForAssignment();
+      }
+
+      if (!doctor) {
+        res.status(400).json({ message: "No active doctors available for assignment" });
+        return;
+      }
+
+      const token = randomBytes(32).toString("hex");
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      const reviewToken = await storage.createDoctorReviewToken({
+        applicationId,
+        doctorId: doctor.userId || doctor.id,
+        token,
+        status: "pending",
+        expiresAt,
+      });
+
+      await storage.updateApplication(applicationId, {
+        status: "doctor_review",
+        assignedReviewerId: doctor.userId || doctor.id,
+      });
+
+      const patient = application.userId ? await storage.getUser(application.userId) : null;
+      const pkg = application.packageId ? await storage.getPackage(application.packageId) : null;
+      const doctorUser = await storage.getUser(doctor.userId || doctor.id);
+
+      const protocol = process.env.NODE_ENV === "production" ? "https" : "https";
+      const host = req.get("host") || "localhost:5000";
+      const reviewUrl = `${protocol}://${host}/review/${token}`;
+
+      await storage.createNotification({
+        userId: req.user!.id,
+        type: "doctor_assignment",
+        title: "Application Sent to Doctor",
+        message: `Application for ${patient?.firstName || "Patient"} ${patient?.lastName || ""} sent to Dr. ${doctorUser?.lastName || doctor.fullName || "Doctor"}. Review link: ${reviewUrl}`,
+        isRead: false,
+        actionUrl: reviewUrl,
+      });
+
+      if (doctorUser) {
+        await storage.createNotification({
+          userId: doctorUser.id,
+          type: "review_assigned",
+          title: "New Patient Review Assigned",
+          message: `You have been assigned to review ${patient?.firstName || "a patient"}'s application for ${pkg?.name || "a service"}.`,
+          isRead: false,
+        });
+      }
+
+      fireAutoMessageTriggers(applicationId, "doctor_review");
+
+      await storage.createActivityLog({
+        userId: req.user!.id,
+        action: "application_sent_to_doctor",
+        entityType: "application",
+        entityId: applicationId,
+        details: {
+          doctorId: doctor.userId || doctor.id,
+          doctorName: doctorUser ? `${doctorUser.firstName} ${doctorUser.lastName}` : doctor.fullName,
+          reviewUrl,
+          tokenId: reviewToken.id,
+        } as any,
+      });
+
+      res.json({
+        message: "Application sent to doctor for review",
+        reviewUrl,
+        token: reviewToken,
+        doctor: {
+          id: doctor.userId || doctor.id,
+          name: doctorUser ? `${doctorUser.firstName} ${doctorUser.lastName}` : doctor.fullName,
+        },
+      });
+    } catch (error: any) {
+      console.error("Send to doctor error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/review/:token", async (req, res) => {
+    try {
+      const tokenRecord = await storage.getDoctorReviewTokenByToken(req.params.token);
+      if (!tokenRecord) {
+        res.status(404).json({ message: "Review link not found or invalid" });
+        return;
+      }
+
+      if (tokenRecord.status !== "pending") {
+        res.status(410).json({ message: "This review has already been completed", status: tokenRecord.status });
+        return;
+      }
+
+      if (new Date() > new Date(tokenRecord.expiresAt)) {
+        await storage.updateDoctorReviewToken(tokenRecord.id, { status: "expired" });
+        res.status(410).json({ message: "This review link has expired" });
+        return;
+      }
+
+      const application = await storage.getApplication(tokenRecord.applicationId);
+      if (!application) {
+        res.status(404).json({ message: "Application not found" });
+        return;
+      }
+
+      const patient = application.userId ? await storage.getUser(application.userId) : null;
+      const pkg = application.packageId ? await storage.getPackage(application.packageId) : null;
+      const doctorUser = await storage.getUser(tokenRecord.doctorId);
+      const doctorProfile = await storage.getDoctorProfileByUserId(tokenRecord.doctorId);
+
+      res.json({
+        tokenId: tokenRecord.id,
+        status: tokenRecord.status,
+        expiresAt: tokenRecord.expiresAt,
+        patient: patient ? {
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          email: patient.email,
+          phone: patient.phone,
+          dateOfBirth: patient.dateOfBirth,
+          address: patient.address,
+          city: patient.city,
+          state: patient.state,
+          zipCode: patient.zipCode,
+        } : null,
+        application: {
+          id: application.id,
+          status: application.status,
+          formData: application.formData,
+          createdAt: application.createdAt,
+        },
+        package: pkg ? {
+          name: pkg.name,
+          description: pkg.description,
+        } : null,
+        doctor: doctorUser ? {
+          firstName: doctorUser.firstName,
+          lastName: doctorUser.lastName,
+        } : null,
+        doctorProfile: doctorProfile ? {
+          fullName: doctorProfile.fullName,
+          licenseNumber: doctorProfile.licenseNumber,
+          specialty: doctorProfile.specialty,
+          state: doctorProfile.state,
+        } : null,
+      });
+    } catch (error: any) {
+      console.error("Review token lookup error:", error);
+      res.status(500).json({ message: "Failed to load review" });
+    }
+  });
+
+  app.post("/api/review/:token/decision", async (req, res) => {
+    try {
+      const { decision, notes } = req.body;
+      if (!decision || !["approved", "denied"].includes(decision)) {
+        res.status(400).json({ message: "Decision must be 'approved' or 'denied'" });
+        return;
+      }
+
+      const tokenRecord = await storage.getDoctorReviewTokenByToken(req.params.token);
+      if (!tokenRecord) {
+        res.status(404).json({ message: "Review link not found" });
+        return;
+      }
+
+      if (tokenRecord.status !== "pending") {
+        res.status(410).json({ message: "This review has already been completed" });
+        return;
+      }
+
+      if (new Date() > new Date(tokenRecord.expiresAt)) {
+        await storage.updateDoctorReviewToken(tokenRecord.id, { status: "expired" });
+        res.status(410).json({ message: "This review link has expired" });
+        return;
+      }
+
+      await storage.updateDoctorReviewToken(tokenRecord.id, {
+        status: decision,
+        usedAt: new Date(),
+        doctorNotes: notes || null,
+      });
+
+      const application = await storage.getApplication(tokenRecord.applicationId);
+
+      if (decision === "approved") {
+        await storage.updateApplication(tokenRecord.applicationId, {
+          status: "doctor_approved",
+          level2Notes: notes,
+          level2ApprovedAt: new Date(),
+          level2ApprovedBy: tokenRecord.doctorId,
+          assignedReviewerId: tokenRecord.doctorId,
+        });
+
+        await autoGenerateDocument(tokenRecord.applicationId, tokenRecord.doctorId);
+        fireAutoMessageTriggers(tokenRecord.applicationId, "doctor_approved");
+
+        if (application?.userId) {
+          await storage.createNotification({
+            userId: application.userId,
+            type: "application_approved",
+            title: "Application Approved",
+            message: "Your application has been approved by the reviewing doctor. Your documents are being prepared.",
+            isRead: false,
+          });
+        }
+      } else {
+        await storage.updateApplication(tokenRecord.applicationId, {
+          status: "doctor_denied",
+          level2Notes: notes,
+          rejectedAt: new Date(),
+          rejectedBy: tokenRecord.doctorId,
+          rejectionReason: notes,
+        });
+
+        fireAutoMessageTriggers(tokenRecord.applicationId, "doctor_denied");
+
+        if (application?.userId) {
+          await storage.createNotification({
+            userId: application.userId,
+            type: "application_denied",
+            title: "Application Not Approved",
+            message: notes ? `Your application was not approved. Reason: ${notes}` : "Your application was not approved at this time.",
+            isRead: false,
+          });
+        }
+      }
+
+      await storage.createActivityLog({
+        userId: tokenRecord.doctorId,
+        action: `doctor_${decision}`,
+        entityType: "application",
+        entityId: tokenRecord.applicationId,
+        details: { notes, tokenId: tokenRecord.id } as any,
+      });
+
+      res.json({ message: `Application ${decision} successfully`, decision });
+    } catch (error: any) {
+      console.error("Doctor decision error:", error);
+      res.status(500).json({ message: "Failed to submit decision" });
+    }
+  });
+
+  // ===========================================================================
   // FIREBASE INITIALIZATION / SEED ENDPOINT
   // ===========================================================================
 
