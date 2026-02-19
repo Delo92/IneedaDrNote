@@ -1,0 +1,30 @@
+Problem: Express Sessions Stored in Server Memory
+
+The server was using express-session to track logged-in users. Every time someone logged in, a session record was created and stored in the server's RAM. This caused three issues:
+
+Memory leak -- Sessions pile up in RAM and never get properly cleaned, slowly eating memory until the server crashes or slows down.
+Sessions lost on restart -- Every deploy or server restart wipes all sessions, forcing every user to log in again.
+Can't scale -- If you run multiple server instances, they each have their own memory, so a user logged into one instance isn't recognized by another.
+The Fix: Remove Sessions Entirely, Use Firebase Tokens Only
+
+Since the app already uses Firebase Authentication, every request from the frontend already sends a Firebase ID token in the Authorization: Bearer <token> header. The server was using that token AND also creating a redundant session as a fallback. The fix removes that redundant layer.
+
+What was changed in server/routes.ts:
+
+Removed the express-session import at the top of the file.
+Removed the session middleware setup -- the block that called app.use(session({ ... })) with the secret, cookie settings, etc.
+Removed the SessionData type declaration -- the declare module "express-session" block that defined userId, userLevel, firebaseUid on the session.
+Updated isAuthenticated middleware -- removed the session fallback. It now ONLY checks for a Bearer token in the Authorization header, verifies it with Firebase, and looks up the user. No token = 401 unauthorized. No more req.session anywhere in this function.
+Updated /api/auth/me -- same change: removed the if (req.session.userId) fallback. It now only works with a Firebase token.
+Updated /api/auth/register, /api/auth/login, /api/auth/firebase -- removed the lines that set req.session.userId and req.session.userLevel after login/register. Those lines are no longer needed.
+Simplified /api/auth/logout -- it used to call req.session.destroy(). Now it just returns a success response, since logout is handled on the frontend by clearing the Firebase token.
+What was changed in script/build.ts:
+
+Removed "express-session" and "connect-pg-simple" from the bundling allowlist since those packages are no longer used.
+
+Packages uninstalled:
+
+express-session
+connect-pg-simple
+@types/express-session
+The key requirement: The frontend must always send the Firebase ID token with every API request in the Authorization: Bearer <token> header. If your other project's frontend already does this (which it should if it uses Firebase Auth), then this fix will work the same way there.
