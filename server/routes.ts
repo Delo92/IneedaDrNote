@@ -1,6 +1,5 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import session from "express-session";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
@@ -106,14 +105,6 @@ const memoryUpload = multer({
   },
 });
 
-declare module "express-session" {
-  interface SessionData {
-    userId: string;
-    userLevel: number;
-    firebaseUid: string;
-  }
-}
-
 declare global {
   namespace Express {
     interface Request {
@@ -158,25 +149,6 @@ const isAuthenticated = async (req: Request, res: Response, next: NextFunction) 
           email: user.email,
           firebaseUid: decodedToken.uid,
         };
-        req.session.userId = user.id;
-        req.session.userLevel = user.userLevel;
-        req.session.firebaseUid = decodedToken.uid;
-        return next();
-      }
-    }
-
-    if (req.session.userId) {
-      const user = await storage.getUser(req.session.userId);
-      if (user) {
-        req.user = {
-          id: user.id,
-          username: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          userLevel: user.userLevel,
-          email: user.email,
-          firebaseUid: user.firebaseUid || user.id,
-        };
         return next();
       }
     }
@@ -210,20 +182,6 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Session middleware
-  app.use(
-    session({
-      secret: process.env.SESSION_SECRET || "dev-secret-change-me",
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        secure: process.env.NODE_ENV === "production",
-        httpOnly: true,
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      },
-    })
-  );
-
   // ===========================================================================
   // FILE UPLOAD ROUTES (Firebase Storage)
   // ===========================================================================
@@ -316,10 +274,6 @@ export async function registerRoutes(
         isActive: true,
       });
 
-      // Create session
-      req.session.userId = user.id;
-      req.session.userLevel = user.userLevel;
-
       // Log activity
       await storage.createActivityLog({
         userId: user.id,
@@ -366,10 +320,6 @@ export async function registerRoutes(
         res.status(401).json({ message: "Account is deactivated" });
         return;
       }
-
-      // Create session
-      req.session.userId = user.id;
-      req.session.userLevel = user.userLevel;
 
       // Log activity
       await storage.createActivityLog({
@@ -452,9 +402,6 @@ export async function registerRoutes(
         return;
       }
 
-      req.session.userId = user.id;
-      req.session.userLevel = user.userLevel;
-
       await storage.createActivityLog({
         userId: user.id,
         action: "user_login",
@@ -476,13 +423,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy((err) => {
-      if (err) {
-        res.status(500).json({ message: "Logout failed" });
-        return;
-      }
-      res.json({ message: "Logged out" });
-    });
+    res.json({ message: "Logged out" });
   });
 
   app.get("/api/auth/me", async (req, res) => {
@@ -501,17 +442,6 @@ export async function registerRoutes(
           }
         }
 
-        if (user) {
-          req.session.userId = user.id;
-          req.session.userLevel = user.userLevel;
-          req.session.firebaseUid = decodedToken.uid;
-          res.json({ user: { ...user, passwordHash: undefined } });
-          return;
-        }
-      }
-
-      if (req.session.userId) {
-        const user = await storage.getUser(req.session.userId);
         if (user) {
           res.json({ user: { ...user, passwordHash: undefined } });
           return;
