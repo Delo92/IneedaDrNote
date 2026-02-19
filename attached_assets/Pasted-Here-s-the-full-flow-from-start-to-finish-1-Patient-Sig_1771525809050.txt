@@ -1,0 +1,50 @@
+Here's the full flow from start to finish:
+
+1. Patient Signs Up
+The patient creates an account on the platform (email/password or Google sign-in). They're automatically assigned as a Level 1 (Applicant) user.
+
+2. Patient Browses Packages
+They visit the packages/services page and pick the service they need (e.g., an ESA letter, support animal certification, etc.). Each package has its own price, required documents, and form fields.
+
+3. Patient Completes Payment
+After selecting a package, they go through payment. Once paid, their application is created with the status "pending".
+
+4. Application Sits in Admin Queue
+The application now shows up in the Admin's (Level 3) "All Orders" list with a "Pending" badge. It's waiting for an admin to take action.
+
+5. Admin Sends Application to a Doctor
+The admin clicks the "Send to Doctor" button on that application. Behind the scenes:
+
+The system automatically picks the next doctor in line using a fair rotation (round-robin -- like a draft system, so no single doctor gets overloaded).
+A secure one-time-use link is generated (a long random code that expires in 7 days).
+The application status changes to "doctor_review".
+The admin sees a popup with the secure review link they can copy and email/text to the doctor.
+6. Doctor Reviews via Secure Link
+The doctor opens the link in any browser -- no login or account needed. They see:
+
+Patient's name, email, phone, date of birth, address
+The service package details
+Any form data the patient filled out
+Their own name and credentials displayed for confirmation
+7. Doctor Makes a Decision
+At the bottom of the review page, the doctor can add optional notes and then click either:
+
+"Approve Application" -- or --
+"Deny Application"
+The link can only be used once. After they decide, it's done.
+
+8a. If Approved:
+
+Application status changes to "doctor_approved"
+A certificate/document is automatically generated with the doctor's credentials (name, license number, NPI, DEA)
+The patient gets a notification that their application was approved and documents are being prepared
+Auto-messages fire if configured for this package
+8b. If Denied:
+
+Application status changes to "doctor_denied"
+The patient gets a notification with the denial reason (if the doctor provided notes)
+Auto-messages fire if configured
+9. Completion
+Once approved, the patient can access their auto-generated certificate/documents from their dashboard. The admin can optionally mark the application as "completed" for final closure.
+
+The doctor can see their full review history (approved, denied, pending counts) on their own dashboard, along with any commissions they've earned from referrals.
