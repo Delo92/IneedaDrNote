@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Form,
   FormControl,
@@ -16,12 +18,14 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConfig } from "@/contexts/ConfigContext";
 import { useToast } from "@/hooks/use-toast";
-import { User, Bell, Lock, Loader2 } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { User, Bell, Lock, Loader2, Mail } from "lucide-react";
 
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -31,6 +35,125 @@ const profileSchema = z.object({
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;
+
+const adminNotificationSchema = z.object({
+  notificationEmail: z.string().email("Please enter a valid email address").or(z.literal("")),
+});
+
+type AdminNotificationFormData = z.infer<typeof adminNotificationSchema>;
+
+function AdminNotificationSettings() {
+  const { toast } = useToast();
+
+  const { data: adminSettings, isLoading } = useQuery<Record<string, any>>({
+    queryKey: ["/api/admin/settings"],
+  });
+
+  const adminForm = useForm<AdminNotificationFormData>({
+    resolver: zodResolver(adminNotificationSchema),
+    defaultValues: {
+      notificationEmail: "",
+    },
+  });
+
+  useEffect(() => {
+    if (adminSettings?.notificationEmail) {
+      adminForm.reset({
+        notificationEmail: adminSettings.notificationEmail,
+      });
+    }
+  }, [adminSettings]);
+
+  const mutation = useMutation({
+    mutationFn: async (data: AdminNotificationFormData) => {
+      await apiRequest("PUT", "/api/admin/settings", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      toast({
+        title: "Settings Saved",
+        description: "Admin notification email has been updated.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save settings.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onAdminSubmit = (data: AdminNotificationFormData) => {
+    mutation.mutate(data);
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-72 mt-2" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-24" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Mail className="h-5 w-5" />
+          <CardTitle>Admin Notifications</CardTitle>
+        </div>
+        <CardDescription>
+          Set the email address where admin notifications will be sent (e.g., new application alerts, doctor approvals)
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...adminForm}>
+          <form onSubmit={adminForm.handleSubmit(onAdminSubmit)} className="space-y-4">
+            <FormField
+              control={adminForm.control}
+              name="notificationEmail"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notification Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="admin@example.com"
+                      data-testid="input-admin-notification-email"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    All system notifications will be sent to this email address
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" disabled={mutation.isPending} data-testid="button-save-admin-notification">
+              {mutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Notification Email"
+              )}
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -210,6 +333,8 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {user.userLevel >= 3 && <AdminNotificationSettings />}
 
         {/* Security Settings */}
         <Card>

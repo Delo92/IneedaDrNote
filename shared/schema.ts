@@ -112,7 +112,7 @@ export const packages = pgTable("packages", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   state: text("state"),
   requiredDocuments: jsonb("required_documents").$type<string[]>().default([]),
-  formFields: jsonb("form_fields").$type<{ name: string; type: string; required: boolean; options?: string[] }[]>().default([]),
+  formFields: jsonb("form_fields").$type<{ name: string; label: string; type: string; required: boolean; options?: string[] }[]>().default([]),
   workflowSteps: jsonb("workflow_steps").$type<string[]>().default([
     "Registration",
     "Payment",

@@ -8,6 +8,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { firebaseStorage, firebaseAuth, getAdminAuth } from "./firebase-admin";
+import { sendDoctorApprovalEmail, sendAdminNotificationEmail, sendPatientApprovalEmail } from "./email";
 
 async function fireAutoMessageTriggers(applicationId: string, newStatus: string) {
   try {
@@ -277,7 +278,13 @@ export async function registerRoutes(
 
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, firstName, lastName, phone, referralCode, firebaseUid } = req.body;
+      const {
+        email, password, firstName, lastName, phone, referralCode, firebaseUid,
+        middleName, dateOfBirth, address, city, state, zipCode,
+        driverLicenseNumber, medicalCondition, ssn,
+        hasMedicare, isVeteran,
+        smsConsent, emailConsent, chargeUnderstanding, patientAuthorization
+      } = req.body;
 
       if (!email || !password || !firstName || !lastName) {
         res.status(400).json({ message: "Missing required fields" });
@@ -303,7 +310,9 @@ export async function registerRoutes(
         }
       }
 
-      const user = await storage.createUser({
+      const registrationComplete = !!(firstName && lastName && phone && dateOfBirth && address && city && state && zipCode && smsConsent && emailConsent && chargeUnderstanding && patientAuthorization);
+
+      const userData: any = {
         email,
         passwordHash,
         firstName,
@@ -315,9 +324,27 @@ export async function registerRoutes(
         referralCode: userReferralCode,
         referredByUserId,
         isActive: true,
-      });
+        registrationComplete,
+      };
 
-      // Log activity
+      if (middleName) userData.middleName = middleName;
+      if (dateOfBirth) userData.dateOfBirth = dateOfBirth;
+      if (address) userData.address = address;
+      if (city) userData.city = city;
+      if (state) userData.state = state;
+      if (zipCode) userData.zipCode = zipCode;
+      if (driverLicenseNumber) userData.driverLicenseNumber = driverLicenseNumber;
+      if (medicalCondition) userData.medicalCondition = medicalCondition;
+      if (ssn) userData.ssn = ssn;
+      if (hasMedicare !== undefined) userData.hasMedicare = hasMedicare;
+      if (isVeteran !== undefined) userData.isVeteran = isVeteran;
+      if (smsConsent !== undefined) userData.smsConsent = smsConsent;
+      if (emailConsent !== undefined) userData.emailConsent = emailConsent;
+      if (chargeUnderstanding !== undefined) userData.chargeUnderstanding = chargeUnderstanding;
+      if (patientAuthorization !== undefined) userData.patientAuthorization = patientAuthorization;
+
+      const user = await storage.createUser(userData);
+
       await storage.createActivityLog({
         userId: user.id,
         action: "user_registered",
@@ -574,6 +601,90 @@ export async function registerRoutes(
   });
 
   // ===========================================================================
+  // PROFILE ROUTES (Self-service profile for applicants)
+  // ===========================================================================
+
+  app.get("/api/profile", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+      res.json({ ...user, passwordHash: undefined });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/profile", requireAuth, async (req, res) => {
+    try {
+      const {
+        firstName, middleName, lastName, phone, dateOfBirth,
+        address, city, state, zipCode,
+        driverLicenseNumber, medicalCondition, ssn,
+        hasMedicare, isVeteran,
+        smsConsent, emailConsent, chargeUnderstanding, patientAuthorization,
+        registrationComplete, referralCode
+      } = req.body;
+
+      const updates: Record<string, any> = {};
+
+      if (firstName !== undefined) updates.firstName = firstName;
+      if (middleName !== undefined) updates.middleName = middleName;
+      if (lastName !== undefined) updates.lastName = lastName;
+      if (phone !== undefined) updates.phone = phone;
+      if (dateOfBirth !== undefined) updates.dateOfBirth = dateOfBirth;
+      if (address !== undefined) updates.address = address;
+      if (city !== undefined) updates.city = city;
+      if (state !== undefined) updates.state = state;
+      if (zipCode !== undefined) updates.zipCode = zipCode;
+      if (driverLicenseNumber !== undefined) updates.driverLicenseNumber = driverLicenseNumber;
+      if (medicalCondition !== undefined) updates.medicalCondition = medicalCondition;
+      if (ssn !== undefined) updates.ssn = ssn;
+      if (hasMedicare !== undefined) updates.hasMedicare = hasMedicare;
+      if (isVeteran !== undefined) updates.isVeteran = isVeteran;
+      if (smsConsent !== undefined) updates.smsConsent = smsConsent;
+      if (emailConsent !== undefined) updates.emailConsent = emailConsent;
+      if (chargeUnderstanding !== undefined) updates.chargeUnderstanding = chargeUnderstanding;
+      if (patientAuthorization !== undefined) updates.patientAuthorization = patientAuthorization;
+      if (registrationComplete !== undefined) updates.registrationComplete = registrationComplete;
+      if (referralCode !== undefined) updates.referralCode = referralCode;
+
+      const user = await storage.updateUser(req.user!.id, updates as any);
+      if (!user) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+      res.json({ ...user, passwordHash: undefined });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===========================================================================
+  // ADMIN SETTINGS ROUTES
+  // ===========================================================================
+
+  app.get("/api/admin/settings", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const settings = await storage.getAdminSettings();
+      res.json(settings || {});
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/admin/settings", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const settings = await storage.updateAdminSettings(req.body);
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===========================================================================
   // APPLICATION ROUTES (Authenticated)
   // ===========================================================================
 
@@ -606,7 +717,7 @@ export async function registerRoutes(
 
   app.post("/api/applications", requireAuth, async (req, res) => {
     try {
-      const { packageId, formData } = req.body;
+      const { packageId, formData, autoSendToDoctor } = req.body;
 
       const pkg = await storage.getPackage(packageId);
       if (!pkg) {
@@ -619,6 +730,7 @@ export async function registerRoutes(
       const application = await storage.createApplication({
         userId: req.user!.id,
         packageId,
+        packageName: pkg.name,
         currentStep: 1,
         totalSteps: workflowSteps.length,
         status: "pending",
@@ -627,7 +739,6 @@ export async function registerRoutes(
         paymentAmount: pkg.price,
       });
 
-      // Create workflow steps
       for (let i = 0; i < workflowSteps.length; i++) {
         await storage.createApplicationStep({
           applicationId: application.id,
@@ -635,6 +746,70 @@ export async function registerRoutes(
           name: workflowSteps[i],
           status: i === 0 ? "in-progress" : "pending",
         });
+      }
+
+      if (autoSendToDoctor || req.body.paymentStatus === "paid") {
+        try {
+          const doctor = await storage.getNextDoctorForAssignment();
+          if (doctor) {
+            const token = randomBytes(32).toString("hex");
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 7);
+
+            await storage.createDoctorReviewToken({
+              applicationId: application.id,
+              doctorId: doctor.userId || doctor.id,
+              token,
+              status: "pending",
+              expiresAt,
+            });
+
+            await storage.updateApplication(application.id, {
+              status: "doctor_review",
+              assignedReviewerId: doctor.userId || doctor.id,
+            });
+
+            const patient = req.user!;
+            const doctorUser = await storage.getUser(doctor.userId || doctor.id);
+            const protocol = "https";
+            const host = req.get("host") || "localhost:5000";
+            const reviewUrl = `${protocol}://${host}/review/${token}`;
+            const patientName = `${patient.firstName} ${patient.lastName}`;
+
+            if (doctorUser?.email) {
+              sendDoctorApprovalEmail({
+                doctorEmail: doctorUser.email,
+                doctorName: doctorUser.lastName || doctor.fullName || "Doctor",
+                patientName,
+                patientEmail: patient.email,
+                packageName: pkg.name,
+                formData: formData || {},
+                reviewUrl,
+                applicationId: application.id,
+              }).catch(err => console.error("Auto doctor email error:", err));
+            }
+
+            const adminSettings = await storage.getAdminSettings();
+            const notificationEmail = adminSettings?.notificationEmail;
+            if (notificationEmail) {
+              sendAdminNotificationEmail({
+                adminEmail: notificationEmail,
+                doctorName: doctorUser?.lastName || doctor.fullName || "Doctor",
+                patientName,
+                patientEmail: patient.email,
+                packageName: pkg.name,
+                formData: formData || {},
+                reviewUrl,
+                applicationId: application.id,
+              }).catch(err => console.error("Auto admin email error:", err));
+            }
+
+            fireAutoMessageTriggers(application.id, "doctor_review");
+            application.status = "doctor_review";
+          }
+        } catch (autoErr) {
+          console.error("Auto send-to-doctor failed (non-blocking):", autoErr);
+        }
       }
 
       res.json(application);
@@ -1634,6 +1809,39 @@ export async function registerRoutes(
 
       fireAutoMessageTriggers(applicationId, "doctor_review");
 
+      const patientName = patient ? `${patient.firstName} ${patient.lastName}` : "Patient";
+      const patientEmail = patient?.email || "";
+      const packageName = pkg?.name || "Doctor's Note";
+      const doctorEmail = doctorUser?.email;
+
+      if (doctorEmail) {
+        sendDoctorApprovalEmail({
+          doctorEmail,
+          doctorName: doctorUser?.lastName || doctor.fullName || "Doctor",
+          patientName,
+          patientEmail,
+          packageName,
+          formData: application.formData || {},
+          reviewUrl,
+          applicationId,
+        }).catch(err => console.error("Doctor email error:", err));
+      }
+
+      const adminSettings = await storage.getAdminSettings();
+      const notificationEmail = adminSettings?.notificationEmail;
+      if (notificationEmail) {
+        sendAdminNotificationEmail({
+          adminEmail: notificationEmail,
+          doctorName: doctorUser?.lastName || doctor.fullName || "Doctor",
+          patientName,
+          patientEmail,
+          packageName,
+          formData: application.formData || {},
+          reviewUrl,
+          applicationId,
+        }).catch(err => console.error("Admin notification email error:", err));
+      }
+
       await storage.createActivityLog({
         userId: req.user!.id,
         action: "application_sent_to_doctor",
@@ -1787,6 +1995,21 @@ export async function registerRoutes(
             message: "Your application has been approved by the reviewing doctor. Your documents are being prepared.",
             isRead: false,
           });
+
+          const patient = await storage.getUser(application.userId);
+          const pkg = application.packageId ? await storage.getPackage(application.packageId) : null;
+          if (patient?.email) {
+            const protocol = "https";
+            const host = req.get("host") || "localhost:5000";
+            const dashboardUrl = `${protocol}://${host}/dashboard/applicant/documents`;
+            sendPatientApprovalEmail({
+              patientEmail: patient.email,
+              patientName: `${patient.firstName} ${patient.lastName}`,
+              packageName: pkg?.name || "Doctor's Note",
+              applicationId: tokenRecord.applicationId,
+              dashboardUrl,
+            }).catch(err => console.error("Patient approval email error:", err));
+          }
         }
       } else {
         await storage.updateApplication(tokenRecord.applicationId, {

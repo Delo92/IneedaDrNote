@@ -30,8 +30,8 @@ Path aliases are configured: `@/` for client/src, `@shared/` for shared code, `@
 ### Backend Architecture
 - **Runtime**: Node.js with Express.js
 - **Language**: TypeScript with ES modules
-- **Session Management**: express-session with server-side storage
-- **Authentication**: Custom session-based auth with bcrypt password hashing
+- **Authentication**: Firebase Auth (Bearer token) + bcrypt password hashing
+- **Email Service**: SendGrid (`@sendgrid/mail`) for transactional emails (`server/email.ts`)
 - **API Pattern**: RESTful endpoints under `/api/` prefix
 
 ### Data Layer
@@ -81,41 +81,54 @@ Role names are configurable per deployment via the `siteConfig` table.
 - **Charts**: Recharts (via shadcn chart component)
 
 ### Backend Libraries
-- **Authentication**: bcryptjs for password hashing
-- **Sessions**: express-session with connect-pg-simple for PostgreSQL session store
-- **File Uploads**: multer for multipart form data (gallery image uploads stored in `uploads/gallery/`)
+- **Authentication**: bcryptjs for password hashing, Firebase Admin SDK for token verification
+- **Email**: @sendgrid/mail for transactional emails (doctor approval, admin notification, patient approval)
+- **File Uploads**: multer for multipart form data (gallery image uploads stored in Firebase Storage)
 
 ### Development Tools
 - **Replit Plugins**: @replit/vite-plugin-runtime-error-modal, cartographer, dev-banner
 - **TypeScript**: Strict mode with module bundler resolution
 
 ### Environment Variables Required
-- `DATABASE_URL` - PostgreSQL connection string (required)
-- `SESSION_SECRET` - Session encryption key (defaults to dev value)
-- `VITE_FIREBASE_*` - Optional Firebase configuration for enhanced auth
+- `FIREBASE_SERVICE_ACCOUNT_KEY` - Firebase service account JSON (required)
+- `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_PROJECT_ID` - Firebase client config
+- `SENDGRID_API_KEY` - SendGrid API key for transactional emails (optional, emails skipped if not set)
+- `SENDGRID_FROM_EMAIL` - From email address for SendGrid (defaults to noreply@ineedadrnote.com)
 
 ## Current Implementation Status
 
 ### Completed Features
-- **Authentication**: Session-based login/registration with bcrypt password hashing
+- **Authentication**: Firebase Auth (Bearer token) + bcrypt password hashing (no sessions)
+- **Extended Registration**: Full registration form collecting personal info, address, medical info, and 4 required consent checkboxes
+- **Profile Management**: Self-service profile page (`/dashboard/applicant/registration`) with completeness tracking (green/amber banners)
+- **Profile Gate**: NewApplication blocks access until profile is complete (12 required fields + consents)
+- **Auto-Fill Application**: Profile data auto-fills into application formData so doctors see everything
+- **Auto-Send to Doctor**: Applications automatically assigned to doctors via round-robin on submission
+- **SendGrid Email Notifications**: Doctor approval email, admin notification email, patient approval email
+- **Package Custom Fields**: Admin can define per-package custom form fields (text, textarea, select, date, etc.)
+- **Admin Notification Email**: Configurable admin email that receives copies of all approval requests
 - **4 Role-Based Dashboards**: Each with unique stats, actions, and navigation
-- **Application Workflow**: 3-step wizard for creating new applications
-- **Package Management**: Browse and select service packages
 - **Doctor Review Token System**: Secure token-based async doctor review via email links
-- **Owner Configuration**: Full white-label settings (branding, role names, contact info)
+- **Owner Configuration**: Full white-label settings (branding, role names, contact info, hero, gallery)
 - **Admin User Management**: Search, filter, and edit user levels/status
 - **Dark/Light Theme**: System-aware with manual toggle
 
-### Application Processing Workflow
+### Application Processing Workflow (Fully Automated)
 
-The complete workflow for processing applications through the platform:
+The complete end-to-end workflow:
 
-1. Level 1 (Patient) purchases package → creates application (status: `pending`)
-2. Level 3 (Admin) clicks "Send to Doctor" → round-robin assigns to active doctor
-3. System generates secure 32-byte token, creates review link (status: `doctor_review`)
+1. Patient registers with full profile (personal info, address, medical info, 4 consents)
+2. Patient selects note type (package) → fills reason + package-specific custom fields
+3. On submit with `autoSendToDoctor: true`:
+   - Round-robin picks next active doctor from `doctorProfiles`
+   - Creates 32-byte token with 7-day expiry
+   - Sets application status to `doctor_review`
+   - Sends email to assigned doctor with "Review & Approve" button
+   - Sends email to admin notification email (if configured) with same approve button
 4. Doctor opens review link (no login required), reviews patient data, approves or denies
-   - If **approved** → Auto-generates document, notifies patient (status: `doctor_approved`)
-   - If **denied** → Notifies patient with reason (status: `doctor_denied`)
+   - If **approved** → Auto-generates document, sends patient email + in-app notification (status: `doctor_approved`)
+   - If **denied** → Sends in-app notification with reason (status: `doctor_denied`)
+5. Admin can also manually trigger "Send to Doctor" from orders page (sends same emails)
 
 **Application Status Values:**
 - `pending` - New application, awaiting admin action
@@ -135,19 +148,23 @@ The complete workflow for processing applications through the platform:
 - **Firestore Collection**: `doctorReviewTokens` stores token records with applicationId, doctorId, status, expiresAt
 
 ### API Endpoints
-- `POST /api/auth/register` - User registration
+- `POST /api/auth/register` - User registration (extended: all profile fields + consents)
 - `POST /api/auth/login` - User login
 - `POST /api/auth/logout` - User logout
 - `GET /api/auth/me` - Get current user
+- `GET /api/profile` - Get user profile (authenticated)
+- `PUT /api/profile` - Update user profile (authenticated)
 - `GET /api/config` - Get site configuration
 - `GET /api/packages` - List active packages
 - `GET /api/applications` - Get user's applications
-- `POST /api/applications` - Create new application
+- `POST /api/applications` - Create new application (supports `autoSendToDoctor` flag)
+- `GET /api/admin/settings` - Get admin settings (Level 3+)
+- `PUT /api/admin/settings` - Update admin settings (Level 3+)
 - `GET /api/doctors` - List active doctors (Level 3+)
 - `GET /api/doctors/stats` - Get doctor review stats (Level 2+)
-- `POST /api/admin/applications/:id/send-to-doctor` - Send application to doctor for review (Level 3+)
+- `POST /api/admin/applications/:id/send-to-doctor` - Send application to doctor for review with emails (Level 3+)
 - `GET /api/review/:token` - Get review data by token (public, no auth)
-- `POST /api/review/:token/decision` - Submit doctor decision (public, no auth, token is auth)
+- `POST /api/review/:token/decision` - Submit doctor decision + trigger emails (public, no auth, token is auth)
 - `GET /api/commissions` - Get commissions (Level 2+)
 - `GET /api/admin/users` - List all users (Level 4+)
 - `PUT /api/admin/users/:id` - Update user (Level 4+)

@@ -10,6 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -35,12 +42,41 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Package } from "@shared/schema";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, X, GripVertical } from "lucide-react";
+
+interface CustomFormField {
+  name: string;
+  label: string;
+  type: string;
+  required: boolean;
+  options?: string[];
+}
+
+const FIELD_TYPES = [
+  { value: "text", label: "Text" },
+  { value: "textarea", label: "Text Area" },
+  { value: "select", label: "Dropdown Select" },
+  { value: "date", label: "Date" },
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Phone" },
+  { value: "number", label: "Number" },
+];
+
+function slugify(label: string): string {
+  return label
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/-+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
 
 const packageSchema = z.object({
   name: z.string().min(1, "Package name is required"),
@@ -54,12 +90,171 @@ const packageSchema = z.object({
 
 type PackageFormData = z.infer<typeof packageSchema>;
 
+function CustomFieldEditor({
+  fields,
+  onChange,
+}: {
+  fields: CustomFormField[];
+  onChange: (fields: CustomFormField[]) => void;
+}) {
+  const addField = () => {
+    onChange([
+      ...fields,
+      { name: "", label: "", type: "text", required: false },
+    ]);
+  };
+
+  const removeField = (index: number) => {
+    onChange(fields.filter((_, i) => i !== index));
+  };
+
+  const updateField = (index: number, updates: Partial<CustomFormField>) => {
+    const updated = fields.map((f, i) => {
+      if (i !== index) return f;
+      const merged = { ...f, ...updates };
+      if (updates.label !== undefined) {
+        merged.name = slugify(updates.label);
+      }
+      return merged;
+    });
+    onChange(updated);
+  };
+
+  const updateOptions = (index: number, optionsText: string) => {
+    const options = optionsText
+      .split("\n")
+      .map((o) => o.trim())
+      .filter(Boolean);
+    updateField(index, { options });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h4 className="text-sm font-medium">Required Fields</h4>
+          <p className="text-xs text-muted-foreground">
+            Define custom form fields applicants must fill out
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addField}
+          data-testid="button-add-custom-field"
+        >
+          <Plus className="mr-1 h-3 w-3" />
+          Add Field
+        </Button>
+      </div>
+
+      {fields.length === 0 && (
+        <p className="text-xs text-muted-foreground py-2 text-center">
+          No custom fields defined. Click "Add Field" to create one.
+        </p>
+      )}
+
+      {fields.map((field, index) => (
+        <Card key={index} className="relative">
+          <CardContent className="p-3 space-y-3">
+            <div className="flex items-start gap-2">
+              <GripVertical className="h-4 w-4 mt-2 text-muted-foreground shrink-0" />
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                      Label
+                    </label>
+                    <Input
+                      value={field.label}
+                      onChange={(e) =>
+                        updateField(index, { label: e.target.value })
+                      }
+                      placeholder="e.g., Symptoms Duration"
+                      data-testid={`input-field-label-${index}`}
+                    />
+                  </div>
+                  <div className="w-[140px]">
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                      Type
+                    </label>
+                    <Select
+                      value={field.type}
+                      onValueChange={(val) => updateField(index, { type: val })}
+                    >
+                      <SelectTrigger data-testid={`select-field-type-${index}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FIELD_TYPES.map((ft) => (
+                          <SelectItem key={ft.value} value={ft.value}>
+                            {ft.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {field.name && (
+                  <p className="text-xs text-muted-foreground">
+                    Field name: <code className="bg-muted px-1 rounded">{field.name}</code>
+                  </p>
+                )}
+
+                {field.type === "select" && (
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                      Options (one per line)
+                    </label>
+                    <Textarea
+                      value={field.options?.join("\n") || ""}
+                      onChange={(e) => updateOptions(index, e.target.value)}
+                      placeholder={"Option 1\nOption 2\nOption 3"}
+                      className="min-h-[60px]"
+                      data-testid={`input-field-options-${index}`}
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={field.required}
+                      onCheckedChange={(val) =>
+                        updateField(index, { required: val })
+                      }
+                      data-testid={`switch-field-required-${index}`}
+                    />
+                    <span className="text-xs text-muted-foreground">Required</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeField(index)}
+                    data-testid={`button-remove-field-${index}`}
+                  >
+                    <X className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function PackagesManagement() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState<Package | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [customFields, setCustomFields] = useState<CustomFormField[]>([]);
 
   const { data: packages, isLoading } = useQuery<Package[]>({
     queryKey: ["/api/packages"],
@@ -80,10 +275,12 @@ export default function PackagesManagement() {
 
   const createPackage = useMutation({
     mutationFn: async (data: PackageFormData) => {
+      const validFields = customFields.filter((f) => f.label.trim() && f.name.trim());
       const response = await apiRequest("POST", "/api/admin/packages", {
         ...data,
         price: parseFloat(data.price),
         features: data.features ? data.features.split("\n").filter(Boolean) : [],
+        formFields: validFields,
       });
       return response.json();
     },
@@ -91,6 +288,7 @@ export default function PackagesManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/packages"] });
       setIsDialogOpen(false);
       form.reset();
+      setCustomFields([]);
       toast({
         title: "Note Type Created",
         description: "The note type has been created successfully.",
@@ -107,10 +305,12 @@ export default function PackagesManagement() {
 
   const updatePackage = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: PackageFormData }) => {
+      const validFields = customFields.filter((f) => f.label.trim() && f.name.trim());
       const response = await apiRequest("PUT", `/api/admin/packages/${id}`, {
         ...data,
         price: parseFloat(data.price),
         features: data.features ? data.features.split("\n").filter(Boolean) : [],
+        formFields: validFields,
       });
       return response.json();
     },
@@ -119,6 +319,7 @@ export default function PackagesManagement() {
       setIsDialogOpen(false);
       setEditingPackage(null);
       form.reset();
+      setCustomFields([]);
       toast({
         title: "Note Type Updated",
         description: "The note type has been updated successfully.",
@@ -156,6 +357,7 @@ export default function PackagesManagement() {
 
   const openCreateDialog = () => {
     setEditingPackage(null);
+    setCustomFields([]);
     form.reset({
       name: "",
       description: "",
@@ -170,12 +372,23 @@ export default function PackagesManagement() {
 
   const openEditDialog = (pkg: Package) => {
     setEditingPackage(pkg);
+    const existingFields: CustomFormField[] = Array.isArray(pkg.formFields)
+      ? (pkg.formFields as any[]).map((f: any) => ({
+          name: f.name || "",
+          label: f.label || f.name || "",
+          type: f.type || "text",
+          required: f.required || false,
+          options: f.options,
+        }))
+      : [];
+    setCustomFields(existingFields);
+    const pkgAny = pkg as any;
     form.reset({
       name: pkg.name,
       description: pkg.description || "",
       price: pkg.price.toString(),
-      features: Array.isArray(pkg.features) ? pkg.features.join("\n") : "",
-      processingTime: pkg.processingTime || "",
+      features: Array.isArray(pkgAny.features) ? pkgAny.features.join("\n") : "",
+      processingTime: pkgAny.processingTime || "",
       requiresLevel2Interaction: pkg.requiresLevel2Interaction || false,
       isActive: pkg.isActive,
     });
@@ -232,51 +445,64 @@ export default function PackagesManagement() {
                       <TableHead>Name</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead>Price</TableHead>
+                      <TableHead>Fields</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {packages && packages.length > 0 ? (
-                      packages.map((pkg) => (
-                        <TableRow key={pkg.id} data-testid={`package-row-${pkg.id}`}>
-                          <TableCell className="font-medium">{pkg.name}</TableCell>
-                          <TableCell className="max-w-xs truncate">
-                            {pkg.description || "-"}
-                          </TableCell>
-                          <TableCell>${Number(pkg.price).toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Badge variant={pkg.isActive ? "default" : "secondary"}>
-                              {pkg.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditDialog(pkg)}
-                                data-testid={`button-edit-package-${pkg.id}`}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              {user?.userLevel === 5 && (
+                      packages.map((pkg) => {
+                        const fieldCount = Array.isArray(pkg.formFields) ? pkg.formFields.length : 0;
+                        return (
+                          <TableRow key={pkg.id} data-testid={`package-row-${pkg.id}`}>
+                            <TableCell className="font-medium">{pkg.name}</TableCell>
+                            <TableCell className="max-w-xs truncate">
+                              {pkg.description || "-"}
+                            </TableCell>
+                            <TableCell>${Number(pkg.price).toFixed(2)}</TableCell>
+                            <TableCell>
+                              {fieldCount > 0 ? (
+                                <Badge variant="secondary" data-testid={`badge-fields-count-${pkg.id}`}>
+                                  {fieldCount} field{fieldCount !== 1 ? "s" : ""}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">None</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={pkg.isActive ? "default" : "secondary"}>
+                                {pkg.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => setDeleteConfirmId(pkg.id)}
-                                  data-testid={`button-delete-package-${pkg.id}`}
+                                  onClick={() => openEditDialog(pkg)}
+                                  data-testid={`button-edit-package-${pkg.id}`}
                                 >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                  <Pencil className="h-4 w-4" />
                                 </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                                {user?.userLevel === 5 && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setDeleteConfirmId(pkg.id)}
+                                    data-testid={`button-delete-package-${pkg.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                           No note types found. Create your first note type to get started.
                         </TableCell>
                       </TableRow>
@@ -288,9 +514,8 @@ export default function PackagesManagement() {
           </CardContent>
         </Card>
 
-        {/* Create/Edit Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingPackage ? "Edit Note Type" : "Create Note Type"}
@@ -394,7 +619,7 @@ export default function PackagesManagement() {
                   control={form.control}
                   name="requiresLevel2Interaction"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <FormItem className="flex flex-row items-center justify-between gap-2 rounded-lg border p-3">
                       <div className="space-y-0.5">
                         <FormLabel>Requires Level 2 Interaction</FormLabel>
                         <FormDescription>
@@ -416,7 +641,7 @@ export default function PackagesManagement() {
                   control={form.control}
                   name="isActive"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <FormItem className="flex flex-row items-center justify-between gap-2 rounded-lg border p-3">
                       <div className="space-y-0.5">
                         <FormLabel>Active</FormLabel>
                         <FormDescription>
@@ -432,6 +657,13 @@ export default function PackagesManagement() {
                       </FormControl>
                     </FormItem>
                   )}
+                />
+
+                <Separator />
+
+                <CustomFieldEditor
+                  fields={customFields}
+                  onChange={setCustomFields}
                 />
 
                 <DialogFooter>
@@ -453,7 +685,6 @@ export default function PackagesManagement() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
         <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
           <DialogContent>
             <DialogHeader>

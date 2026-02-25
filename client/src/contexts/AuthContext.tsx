@@ -28,8 +28,23 @@ interface RegisterData {
   email: string;
   password: string;
   firstName: string;
+  middleName?: string;
   lastName: string;
   phone?: string;
+  dateOfBirth?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  medicalCondition?: string;
+  driverLicenseNumber?: string;
+  hasMedicare?: boolean;
+  ssn?: string;
+  isVeteran?: boolean;
+  smsConsent?: boolean;
+  emailConsent?: boolean;
+  chargeUnderstanding?: boolean;
+  patientAuthorization?: boolean;
   referralCode?: string;
 }
 
