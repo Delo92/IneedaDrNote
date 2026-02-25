@@ -1809,7 +1809,7 @@ export async function registerRoutes(
         res.status(403).json({ message: "Not authorized to update this profile" });
         return;
       }
-      const { fullName, licenseNumber, npiNumber, deaNumber, phone, fax, address, specialty, bio, state, formTemplate, isActive } = req.body;
+      const { fullName, licenseNumber, npiNumber, deaNumber, phone, fax, address, specialty, bio, state, formTemplate, isActive, gizmoFormUrl } = req.body;
       const updateData: Record<string, any> = {};
       if (fullName !== undefined) updateData.fullName = fullName;
       if (licenseNumber !== undefined) updateData.licenseNumber = licenseNumber;
@@ -1817,6 +1817,7 @@ export async function registerRoutes(
       if (deaNumber !== undefined) updateData.deaNumber = deaNumber;
       if (phone !== undefined) updateData.phone = phone;
       if (fax !== undefined) updateData.fax = fax;
+      if (gizmoFormUrl !== undefined) updateData.gizmoFormUrl = gizmoFormUrl;
       if (address !== undefined) updateData.address = address;
       if (specialty !== undefined) updateData.specialty = specialty;
       if (bio !== undefined) updateData.bio = bio;
@@ -2056,6 +2057,126 @@ export async function registerRoutes(
       res.status(500).json({ message: error.message });
     }
   });
+
+  // ===========================================================================
+  // GIZMO FORM SYSTEM — PDF auto-fill
+  // ===========================================================================
+
+  app.get("/api/forms/proxy-pdf", async (req, res) => {
+    try {
+      const url = req.query.url as string;
+      if (!url) {
+        res.status(400).json({ message: "url query parameter required" });
+        return;
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        res.status(502).json({ message: "Failed to fetch PDF from source" });
+        return;
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Cache-Control", "no-store");
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (error: any) {
+      console.error("PDF proxy error:", error);
+      res.status(500).json({ message: "Failed to proxy PDF" });
+    }
+  });
+
+  app.get("/api/forms/gizmo-data/:applicationId", requireAuth, async (req, res) => {
+    try {
+      const application = await storage.getApplication(req.params.applicationId);
+      if (!application) {
+        res.status(404).json({ message: "Application not found" });
+        return;
+      }
+
+      if (application.userId !== req.user!.id && req.user!.userLevel < 3) {
+        res.status(403).json({ message: "Not authorized" });
+        return;
+      }
+
+      const patient = application.userId ? await storage.getUser(application.userId) : null;
+      const formData = application.formData || {};
+
+      const doctorId = application.assignedReviewerId || application.assignedAgentId;
+      let doctorProfile: Record<string, any> | null = null;
+      if (doctorId) {
+        doctorProfile = (await storage.getDoctorProfileByUserId(doctorId)) || null;
+      }
+
+      const patientData: Record<string, string> = {
+        firstName: patient?.firstName || formData.firstName || "",
+        middleName: patient?.middleName || formData.middleName || "",
+        lastName: patient?.lastName || formData.lastName || "",
+        suffix: formData.suffix || "",
+        dateOfBirth: patient?.dateOfBirth || formData.dateOfBirth || "",
+        address: patient?.address || formData.address || "",
+        apt: formData.apt || "",
+        city: patient?.city || formData.city || "",
+        state: patient?.state || formData.state || "",
+        zipCode: patient?.zipCode || formData.zipCode || "",
+        phone: patient?.phone || formData.phone || "",
+        email: patient?.email || formData.email || "",
+        medicalCondition: patient?.medicalCondition || formData.medicalCondition || "",
+        idNumber: patient?.driverLicenseNumber || formData.driverLicenseNumber || formData.idNumber || "",
+        idExpirationDate: formData.idExpirationDate || "",
+        idType: formData.idType || "",
+      };
+
+      const doctorData: Record<string, string> = {
+        firstName: doctorProfile?.fullName?.split(" ")[0] || "",
+        middleName: "",
+        lastName: doctorProfile?.fullName?.split(" ").slice(-1)[0] || "",
+        phone: doctorProfile?.phone || "",
+        address: doctorProfile?.address || "",
+        city: "",
+        state: doctorProfile?.state || "",
+        zipCode: "",
+        licenseNumber: doctorProfile?.licenseNumber || "",
+        npiNumber: doctorProfile?.npiNumber || "",
+      };
+
+      const patientName = [patient?.firstName, patient?.middleName, patient?.lastName].filter(Boolean).join(" ") || "Patient";
+
+      res.json({
+        success: true,
+        patientData,
+        doctorData,
+        gizmoFormUrl: doctorProfile?.gizmoFormUrl || null,
+        generatedDate: new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
+        patientName,
+      });
+    } catch (error: any) {
+      console.error("Gizmo data error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  app.get("/api/documents", requireAuth, async (req, res) => {
+    try {
+      const documents = await storage.getDocumentsByUser(req.user!.id);
+      res.json(documents);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/admin/documents/:applicationId", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const documents = await storage.getDocumentsByApplication(req.params.applicationId);
+      res.json(documents);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===========================================================================
+  // DOCTOR REVIEW TOKEN SYSTEM
+  // ===========================================================================
 
   app.get("/api/review/:token", async (req, res) => {
     try {
