@@ -5,6 +5,7 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  signInWithCustomToken,
   type User as FirebaseUser
 } from "firebase/auth";
 import { auth, signInWithGoogle } from "@/lib/firebase";
@@ -109,9 +110,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return data.user || data;
     } catch (error: any) {
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
-        const response = await apiRequest("POST", "/api/auth/login", { email, password });
+        const response = await apiRequest("POST", "/api/auth/login", { email, password, createFirebaseAccount: true });
         const data = await response.json();
         setUser(data.user);
+        if (data.customToken) {
+          try {
+            await signInWithCustomToken(auth, data.customToken);
+          } catch (e) {
+            console.warn("Could not sign in with custom token:", e);
+          }
+        }
         return data.user;
       }
       throw error;

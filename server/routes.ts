@@ -367,7 +367,7 @@ export async function registerRoutes(
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { email, password, createFirebaseAccount } = req.body;
 
       if (!email || !password) {
         res.status(400).json({ message: "Email and password required" });
@@ -391,7 +391,39 @@ export async function registerRoutes(
         return;
       }
 
-      // Log activity
+      // If the Bearer token is provided, update the firebaseUid
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          const idToken = authHeader.split('Bearer ')[1];
+          const decodedToken = await getAdminAuth().verifyIdToken(idToken);
+          if (decodedToken.uid && user.firebaseUid !== decodedToken.uid) {
+            await storage.updateUser(user.id, { firebaseUid: decodedToken.uid });
+          }
+        } catch {}
+      }
+
+      let customToken: string | undefined;
+      if (createFirebaseAccount) {
+        try {
+          const adminAuth = getAdminAuth();
+          let firebaseUid: string | undefined;
+          try {
+            const fbUser = await adminAuth.getUserByEmail(email);
+            firebaseUid = fbUser.uid;
+          } catch {
+            const fbUser = await adminAuth.createUser({ email, password });
+            firebaseUid = fbUser.uid;
+          }
+          if (firebaseUid) {
+            await storage.updateUser(user.id, { firebaseUid });
+            customToken = await adminAuth.createCustomToken(firebaseUid);
+          }
+        } catch (e) {
+          console.warn("Could not create Firebase account for existing user:", e);
+        }
+      }
+
       await storage.createActivityLog({
         userId: user.id,
         action: "user_login",
@@ -405,6 +437,7 @@ export async function registerRoutes(
           passwordHash: undefined,
           password: undefined,
         },
+        ...(customToken ? { customToken } : {}),
       });
     } catch (error: any) {
       console.error("Login error:", error);
@@ -1502,7 +1535,75 @@ export async function registerRoutes(
     }
   });
 
-  // User management
+  app.post("/api/admin/users", requireAuth, requireLevel(3), async (req, res) => {
+    try {
+      const { email, password, firstName, lastName, userLevel, phone } = req.body;
+
+      if (!email || !password || !firstName || !lastName) {
+        res.status(400).json({ message: "Email, password, first name, and last name are required" });
+        return;
+      }
+
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        res.status(400).json({ message: "A user with this email already exists" });
+        return;
+      }
+
+      const level = userLevel || 1;
+      if (level > req.user!.userLevel) {
+        res.status(403).json({ message: "Cannot create a user with a higher level than your own" });
+        return;
+      }
+
+      let firebaseUid: string | undefined;
+      try {
+        const adminAuth = getAdminAuth();
+        const fbUser = await adminAuth.createUser({ email, password });
+        firebaseUid = fbUser.uid;
+      } catch (e: any) {
+        if (e.code === 'auth/email-already-exists') {
+          try {
+            const fbUser = await getAdminAuth().getUserByEmail(email);
+            firebaseUid = fbUser.uid;
+          } catch {}
+        } else {
+          console.warn("Could not create Firebase Auth account:", e.message);
+        }
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      const profileId = randomBytes(4).toString("hex").toUpperCase();
+      const userReferralCode = randomBytes(4).toString("hex").toUpperCase();
+
+      const user = await storage.createUser({
+        email,
+        firstName,
+        lastName,
+        passwordHash,
+        userLevel: level,
+        profileId,
+        referralCode: userReferralCode,
+        isActive: true,
+        phone: phone || null,
+        firebaseUid: firebaseUid || null,
+      });
+
+      await storage.createActivityLog({
+        userId: req.user!.id,
+        action: "admin_created_user",
+        entityType: "user",
+        entityId: user.id,
+        details: { createdEmail: email, createdLevel: level },
+      });
+
+      res.json({ ...user, passwordHash: undefined });
+    } catch (error: any) {
+      console.error("Admin create user error:", error);
+      res.status(500).json({ message: error.message || "Failed to create user" });
+    }
+  });
+
   app.put("/api/admin/users/:id", requireAuth, requireLevel(3), async (req, res) => {
     try {
       const { userLevel, isActive, firstName, lastName, email, phone, dateOfBirth, address, city, state, zipCode } = req.body;
