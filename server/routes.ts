@@ -228,6 +228,49 @@ export async function registerRoutes(
     });
   });
 
+  app.post("/api/upload/site-image", requireAuth, requireLevel(3), (req, res, next) => {
+    memoryUpload.single("image")(req, res, async (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          res.status(400).json({ message: "File size must be under 10MB" });
+          return;
+        }
+        res.status(400).json({ message: err.message });
+        return;
+      }
+      if (err) {
+        res.status(400).json({ message: err.message });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ message: "No file uploaded" });
+        return;
+      }
+
+      try {
+        const folder = req.body.folder || "site";
+        const bucket = firebaseStorage.bucket();
+        const uniqueSuffix = Date.now() + "-" + randomBytes(4).toString("hex");
+        const ext = req.file.originalname ? "." + req.file.originalname.split(".").pop() : ".jpg";
+        const fileName = `${folder}/${folder}-${uniqueSuffix}${ext}`;
+        const file = bucket.file(fileName);
+
+        await file.save(req.file.buffer, {
+          metadata: {
+            contentType: req.file.mimetype,
+          },
+        });
+
+        await file.makePublic();
+        const url = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+        res.json({ url });
+      } catch (error: any) {
+        console.error("Firebase Storage upload error:", error);
+        res.status(500).json({ message: "Failed to upload image" });
+      }
+    });
+  });
+
   // ===========================================================================
   // AUTH ROUTES
   // ===========================================================================
