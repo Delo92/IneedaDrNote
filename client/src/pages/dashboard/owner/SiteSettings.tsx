@@ -559,60 +559,108 @@ export default function SiteSettings() {
                       name="heroMediaUrl"
                       render={({ field }) => {
                         const previewUrl = field.value || "/images/medilab/hero-bg.jpg";
+                        const isVideo = previewUrl.match(/\.(mp4|webm)(\?|$)/i);
                         return (
                           <FormItem>
-                            <FormLabel>Hero Media URL (Image, Video, or GIF)</FormLabel>
-                            <div className="flex gap-2">
-                              <FormControl>
-                                <Input placeholder="https://example.com/hero.mp4" data-testid="input-hero-media" {...field} />
-                              </FormControl>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  const input = document.createElement("input");
-                                  input.type = "file";
-                                  input.accept = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm";
-                                  input.onchange = async (e) => {
-                                    const file = (e.target as HTMLInputElement).files?.[0];
-                                    if (!file) return;
-                                    try {
-                                      const url = await uploadSiteImage(file, "hero");
-                                      form.setValue("heroMediaUrl", url);
-                                      toast({ title: "Hero image uploaded" });
-                                    } catch (err: any) {
-                                      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-                                    }
-                                  };
-                                  input.click();
-                                }}
-                                data-testid="button-upload-hero"
-                              >
-                                <Upload className="mr-1 h-3 w-3" />
-                                Upload
-                              </Button>
-                            </div>
+                            <FormLabel>Hero Background (Image or Video)</FormLabel>
                             <FormDescription>
-                              Add an image (.jpg, .png), video (.mp4, .webm), or GIF to display in the hero section. Videos and GIFs will autoplay on loop.
+                              Supports images (.jpg, .png, .gif, .webp) and short videos (.mp4, .webm, up to 15 seconds). Videos will autoplay on loop.
                             </FormDescription>
-                            <div className="mt-2 rounded-md border overflow-hidden">
-                              <div className="px-3 py-1.5 bg-muted/50 border-b flex items-center gap-1.5">
-                                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground font-medium">
-                                  {field.value ? "Current Image" : "Default Image (will be used if left blank)"}
-                                </span>
+                            <div className="rounded-md border overflow-hidden">
+                              <div className="aspect-video bg-muted relative group">
+                                {isVideo ? (
+                                  <video
+                                    key={previewUrl}
+                                    src={previewUrl}
+                                    className="w-full h-full object-cover"
+                                    autoPlay
+                                    loop
+                                    muted
+                                    playsInline
+                                    data-testid="video-hero-preview"
+                                  />
+                                ) : (
+                                  <img
+                                    key={previewUrl}
+                                    src={previewUrl}
+                                    alt="Hero preview"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                    data-testid="img-hero-preview"
+                                  />
+                                )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                  <span className="text-white/70 text-xs">
+                                    {field.value ? "Custom Media" : "Default Image"}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="aspect-video bg-muted">
-                                <img
-                                  src={previewUrl}
-                                  alt="Hero preview"
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                  data-testid="img-hero-preview"
-                                />
+                              <div className="p-2 flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1"
+                                  onClick={() => {
+                                    const input = document.createElement("input");
+                                    input.type = "file";
+                                    input.accept = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm";
+                                    input.onchange = async (e) => {
+                                      const file = (e.target as HTMLInputElement).files?.[0];
+                                      if (!file) return;
+                                      if (file.type.startsWith("video/")) {
+                                        const video = document.createElement("video");
+                                        video.preload = "metadata";
+                                        video.onloadedmetadata = async () => {
+                                          URL.revokeObjectURL(video.src);
+                                          if (video.duration > 15) {
+                                            toast({ title: "Video too long", description: "Please use a video under 15 seconds.", variant: "destructive" });
+                                            return;
+                                          }
+                                          try {
+                                            const url = await uploadSiteImage(file, "hero");
+                                            form.setValue("heroMediaUrl", url);
+                                            toast({ title: "Hero video uploaded" });
+                                          } catch (err: any) {
+                                            toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                                          }
+                                        };
+                                        video.src = URL.createObjectURL(file);
+                                      } else {
+                                        try {
+                                          const url = await uploadSiteImage(file, "hero");
+                                          form.setValue("heroMediaUrl", url);
+                                          toast({ title: "Hero image uploaded" });
+                                        } catch (err: any) {
+                                          toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                                        }
+                                      }
+                                    };
+                                    input.click();
+                                  }}
+                                  data-testid="button-replace-hero"
+                                >
+                                  <Upload className="mr-1 h-3 w-3" />
+                                  Replace
+                                </Button>
+                                {field.value && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => form.setValue("heroMediaUrl", "")}
+                                    data-testid="button-remove-hero"
+                                  >
+                                    <Trash2 className="mr-1 h-3 w-3" />
+                                    Reset to Default
+                                  </Button>
+                                )}
                               </div>
                             </div>
+                            <FormControl>
+                              <Input type="hidden" {...field} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         );
