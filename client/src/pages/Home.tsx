@@ -186,7 +186,7 @@ export default function Home() {
             <AnimateOnScroll animation="fade-right">
               <div className="relative">
                 <img
-                  src="/images/medilab/about.jpg"
+                  src={config.aboutImageUrl || "/images/medilab/about.jpg"}
                   alt="About our service"
                   className="rounded-md w-full object-cover shadow-lg"
                   data-testid="img-about"

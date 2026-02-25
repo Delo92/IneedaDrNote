@@ -21,7 +21,7 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { WhiteLabelConfig } from "@shared/config";
-import { Loader2, Palette, Users, Building2, Save, LayoutTemplate, Link as LinkIcon, Plus, Trash2, Image, GripVertical, Upload } from "lucide-react";
+import { Loader2, Palette, Users, Building2, Save, LayoutTemplate, Link as LinkIcon, Plus, Trash2, Image, GripVertical, Upload, ImageIcon, Eye } from "lucide-react";
 
 const footerLinkSchema = z.object({
   label: z.string().min(1, "Label is required"),
@@ -45,6 +45,7 @@ const configSchema = z.object({
   heroSubtitle: z.string().optional(),
   heroBackgroundUrl: z.string().url().optional().or(z.literal("")),
   heroMediaUrl: z.string().url().optional().or(z.literal("")),
+  aboutImageUrl: z.string().url().optional().or(z.literal("")),
   heroButtonText: z.string().optional(),
   heroButtonLink: z.string().optional(),
   heroSecondaryButtonText: z.string().optional(),
@@ -86,6 +87,7 @@ export default function SiteSettings() {
       heroSubtitle: "",
       heroBackgroundUrl: "",
       heroMediaUrl: "",
+      aboutImageUrl: "",
       heroButtonText: "Get Started",
       heroButtonLink: "/register",
       heroSecondaryButtonText: "View Services",
@@ -142,6 +144,7 @@ export default function SiteSettings() {
         heroSubtitle: config.heroSubtitle || "",
         heroBackgroundUrl: config.heroBackgroundUrl || "",
         heroMediaUrl: config.heroMediaUrl || "",
+        aboutImageUrl: config.aboutImageUrl || "",
         heroButtonText: config.heroButtonText || "Get Started",
         heroButtonLink: config.heroButtonLink || "/register",
         heroSecondaryButtonText: config.heroSecondaryButtonText || "View Services",
@@ -232,6 +235,10 @@ export default function SiteSettings() {
                 <TabsTrigger value="hero" data-testid="tab-hero">
                   <LayoutTemplate className="mr-2 h-4 w-4" />
                   Hero Section
+                </TabsTrigger>
+                <TabsTrigger value="page-images" data-testid="tab-page-images">
+                  <ImageIcon className="mr-2 h-4 w-4" />
+                  Page Images
                 </TabsTrigger>
                 <TabsTrigger value="gallery" data-testid="tab-gallery">
                   <Image className="mr-2 h-4 w-4" />
@@ -400,6 +407,23 @@ export default function SiteSettings() {
                           <FormControl>
                             <Input placeholder="https://example.com/logo.png" data-testid="input-logo-url" {...field} />
                           </FormControl>
+                          {field.value && (
+                            <div className="mt-2 rounded-md border overflow-hidden inline-block">
+                              <div className="px-3 py-1.5 bg-muted/50 border-b flex items-center gap-1.5">
+                                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground font-medium">Current Logo</span>
+                              </div>
+                              <div className="p-4 bg-muted/30">
+                                <img
+                                  src={field.value}
+                                  alt="Logo preview"
+                                  className="max-h-16 object-contain"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                  data-testid="img-logo-preview"
+                                />
+                              </div>
+                            </div>
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -458,18 +482,38 @@ export default function SiteSettings() {
                     <FormField
                       control={form.control}
                       name="heroMediaUrl"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Hero Media URL (Image, Video, or GIF)</FormLabel>
-                          <FormControl>
-                            <Input placeholder="https://example.com/hero.mp4" data-testid="input-hero-media" {...field} />
-                          </FormControl>
-                          <FormDescription>
-                            Add an image (.jpg, .png), video (.mp4, .webm), or GIF to display in the hero section. Videos and GIFs will autoplay on loop.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                      render={({ field }) => {
+                        const previewUrl = field.value || "/images/medilab/hero-bg.jpg";
+                        return (
+                          <FormItem>
+                            <FormLabel>Hero Media URL (Image, Video, or GIF)</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://example.com/hero.mp4" data-testid="input-hero-media" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                              Add an image (.jpg, .png), video (.mp4, .webm), or GIF to display in the hero section. Videos and GIFs will autoplay on loop.
+                            </FormDescription>
+                            <div className="mt-2 rounded-md border overflow-hidden">
+                              <div className="px-3 py-1.5 bg-muted/50 border-b flex items-center gap-1.5">
+                                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground font-medium">
+                                  {field.value ? "Current Image" : "Default Image (will be used if left blank)"}
+                                </span>
+                              </div>
+                              <div className="aspect-video bg-muted">
+                                <img
+                                  src={previewUrl}
+                                  alt="Hero preview"
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                  data-testid="img-hero-preview"
+                                />
+                              </div>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
                     />
 
                     <div className="grid gap-4 md:grid-cols-2">
@@ -533,6 +577,78 @@ export default function SiteSettings() {
                 </Card>
               </TabsContent>
 
+              <TabsContent value="page-images">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Page Images</CardTitle>
+                    <CardDescription>
+                      Manage the images used across your public-facing pages. Each field shows a preview of the current image so you know what you're replacing.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <FormField
+                      control={form.control}
+                      name="aboutImageUrl"
+                      render={({ field }) => {
+                        const previewUrl = field.value || "/images/medilab/about.jpg";
+                        return (
+                          <FormItem>
+                            <FormLabel>About Section Image</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://example.com/about.jpg" data-testid="input-about-image" {...field} />
+                            </FormControl>
+                            <FormDescription>
+                              The image displayed next to the "About Us" content on the landing page. Leave blank to use the default.
+                            </FormDescription>
+                            <div className="mt-2 rounded-md border overflow-hidden">
+                              <div className="px-3 py-1.5 bg-muted/50 border-b flex items-center gap-1.5">
+                                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground font-medium">
+                                  {field.value ? "Current Image" : "Default Image (will be used if left blank)"}
+                                </span>
+                              </div>
+                              <div className="aspect-video bg-muted max-w-md">
+                                <img
+                                  src={previewUrl}
+                                  alt="About section preview"
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                  data-testid="img-about-preview"
+                                />
+                              </div>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
+                    />
+
+                    <div className="border-t pt-6">
+                      <h4 className="text-sm font-medium mb-1">Services Section Images</h4>
+                      <p className="text-xs text-muted-foreground mb-4">
+                        These are the images used for each service category on the landing page. They use default images and are shown here for reference.
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {[
+                          { name: "General Notes", img: "/images/medilab/departments-1.jpg" },
+                          { name: "Specialist Notes", img: "/images/medilab/departments-2.jpg" },
+                          { name: "Clearance Letters", img: "/images/medilab/departments-3.jpg" },
+                          { name: "Accommodation Docs", img: "/images/medilab/departments-4.jpg" },
+                          { name: "Urgent Care", img: "/images/medilab/departments-5.jpg" },
+                        ].map((dept) => (
+                          <div key={dept.name} className="rounded-md border overflow-hidden">
+                            <div className="aspect-video bg-muted">
+                              <img src={dept.img} alt={dept.name} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="px-2 py-1.5 text-xs text-muted-foreground text-center font-medium">{dept.name}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               <TabsContent value="gallery">
                 <Card>
                   <CardHeader>
@@ -543,9 +659,24 @@ export default function SiteSettings() {
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {galleryFields.length === 0 && (
-                      <p className="text-sm text-muted-foreground py-4 text-center">
-                        No gallery images added yet. Upload an image or add a URL below.
-                      </p>
+                      <div className="space-y-4">
+                        <p className="text-sm text-muted-foreground text-center">
+                          No custom gallery images added yet. The default images below are currently being used. Upload or add URLs to replace them.
+                        </p>
+                        <div className="border rounded-md overflow-hidden">
+                          <div className="px-3 py-1.5 bg-muted/50 border-b flex items-center gap-1.5">
+                            <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground font-medium">Current Default Gallery Images</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-1 p-2">
+                            {[1,2,3,4,5,6,7,8].map((i) => (
+                              <div key={i} className="aspect-square bg-muted rounded overflow-hidden">
+                                <img src={`/images/medilab/gallery/gallery-${i}.jpg`} alt={`Default gallery ${i}`} className="w-full h-full object-cover" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {galleryFields.map((field, index) => {
