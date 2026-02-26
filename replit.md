@@ -110,6 +110,7 @@ Role names are configurable per deployment via the `siteConfig` table.
 - **Auto-Complete Applications**: Admin toggle to skip doctor review — auto-approves, generates document, emails patient + doctor copy
 - **Price Display**: Prices stored as cents, displayed as dollars with /100 conversion throughout UI
 - **Contact Email Separation**: Users have separate sign-in email (immutable) and contact email (for notifications/receipts)
+- **Manual Payment**: Admin green $ button on Users page — creates full application for a patient as if they paid, runs through auto-complete or doctor review pipeline
 - **4 Role-Based Dashboards**: Each with unique stats, actions, and navigation
 - **Doctor Review Token System**: Secure token-based async doctor review via email links
 - **Owner Configuration**: Full white-label settings (branding, role names, contact info, hero, gallery)

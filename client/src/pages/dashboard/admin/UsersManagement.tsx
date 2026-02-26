@@ -51,7 +51,8 @@ import { useConfig } from "@/contexts/ConfigContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
-import { Search, UserCog, UserPlus, Loader2, Stethoscope, FileText, Info } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Search, UserCog, UserPlus, Loader2, Stethoscope, FileText, Info, DollarSign } from "lucide-react";
 
 const addUserSchema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -113,10 +114,47 @@ export default function UsersManagement() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addDialogTab, setAddDialogTab] = useState("account");
   const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const [manualPaymentUser, setManualPaymentUser] = useState<User | null>(null);
+  const [manualPaymentPackageId, setManualPaymentPackageId] = useState("");
+  const [manualPaymentReason, setManualPaymentReason] = useState("");
+  const [manualPaymentLoading, setManualPaymentLoading] = useState(false);
 
   const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
   });
+
+  const { data: packages } = useQuery<any[]>({
+    queryKey: ["/api/packages"],
+  });
+  const activePackages = packages?.filter((p: any) => p.isActive) || [];
+
+  const handleManualPayment = async () => {
+    if (!manualPaymentUser || !manualPaymentPackageId) return;
+    setManualPaymentLoading(true);
+    try {
+      const res = await apiRequest("POST", `/api/admin/users/${manualPaymentUser.id}/manual-payment`, {
+        packageId: manualPaymentPackageId,
+        reason: manualPaymentReason || "Manual payment by admin",
+      });
+      const data = await res.json();
+      toast({
+        title: "Manual Payment Processed",
+        description: `Application created for ${manualPaymentUser.firstName} ${manualPaymentUser.lastName}. ${data.message || ""}`,
+      });
+      setManualPaymentUser(null);
+      setManualPaymentPackageId("");
+      setManualPaymentReason("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    } catch (error: any) {
+      toast({
+        title: "Payment Failed",
+        description: error.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setManualPaymentLoading(false);
+    }
+  };
 
   const form = useForm<AddUserFormData>({
     resolver: zodResolver(addUserSchema),
@@ -653,14 +691,31 @@ export default function UsersManagement() {
                             {new Date(user.createdAt).toLocaleDateString()}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedUser(user)}
-                              data-testid={`button-view-profile-${user.id}`}
-                            >
-                              <UserCog className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center justify-end gap-1">
+                              {user.userLevel === 1 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setManualPaymentUser(user);
+                                    setManualPaymentPackageId("");
+                                    setManualPaymentReason("");
+                                  }}
+                                  data-testid={`button-manual-payment-${user.id}`}
+                                  title="Manual Payment"
+                                >
+                                  <DollarSign className="h-4 w-4 text-green-500" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedUser(user)}
+                                data-testid={`button-view-profile-${user.id}`}
+                              >
+                                <UserCog className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -683,6 +738,71 @@ export default function UsersManagement() {
           onClose={() => setSelectedUser(null)}
           canEditLevel={canEditLevel}
         />
+
+        <Dialog open={!!manualPaymentUser} onOpenChange={(open) => { if (!open) setManualPaymentUser(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-green-500" />
+                Manual Payment
+              </DialogTitle>
+              <DialogDescription>
+                Process a manual payment for {manualPaymentUser?.firstName} {manualPaymentUser?.lastName}. This will create an application and run it through the full workflow as if the patient paid on their own.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Select Package</Label>
+                <Select value={manualPaymentPackageId} onValueChange={setManualPaymentPackageId}>
+                  <SelectTrigger data-testid="select-manual-payment-package">
+                    <SelectValue placeholder="Choose a registration type..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activePackages.map((pkg: any) => (
+                      <SelectItem key={pkg.id} value={pkg.id} data-testid={`select-package-${pkg.id}`}>
+                        {pkg.name} — ${(Number(pkg.price) / 100).toFixed(2)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Reason for Manual Payment</Label>
+                <Textarea
+                  placeholder="e.g. Phone payment, cash payment, courtesy waiver..."
+                  value={manualPaymentReason}
+                  onChange={(e) => setManualPaymentReason(e.target.value)}
+                  rows={3}
+                  data-testid="input-manual-payment-reason"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setManualPaymentUser(null)}
+                disabled={manualPaymentLoading}
+                data-testid="button-cancel-manual-payment"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleManualPayment}
+                disabled={!manualPaymentPackageId || manualPaymentLoading}
+                data-testid="button-confirm-manual-payment"
+              >
+                {manualPaymentLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  "Process Payment"
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
