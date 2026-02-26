@@ -265,12 +265,17 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
       let profileId = doctorProfile?.id;
 
       if (!profileId) {
+        const autoName = doctorProfileData.fullName || `${selectedUser.firstName} ${selectedUser.lastName}`.trim();
+        const autoLicense = doctorProfileData.licenseNumber || "PENDING";
         const createRes = await apiRequest("POST", `/api/doctor-profiles`, {
           ...doctorProfileData,
+          fullName: autoName,
+          licenseNumber: autoLicense,
           userId: selectedUser.id,
         });
         const created = await createRes.json();
         profileId = created.id;
+        setDoctorProfileData((prev: Record<string, any>) => ({ ...prev, fullName: autoName, licenseNumber: autoLicense }));
         queryClient.invalidateQueries({ queryKey: ["/api/doctor-profiles"] });
       }
 
