@@ -519,31 +519,151 @@ if (hasPlaceholders) {
 
 ---
 
-## Placeholder Positioning
+## Placeholder Positioning — How the Boxes Fit the PDF
+
+This is how input boxes are sized and positioned to fit exactly inside the PDF form's printed field boundaries. The system reads the token positions from the PDF text layer and calculates widths based on where each token sits relative to its neighbors.
+
+### Visual example
+
+Consider this line from the Oklahoma Placard form PDF:
+
+```
+ First Name                    MiddleName                    Last Name                        Date of Birth
+  {firstName}                   {middleName}                  {lastName}                       {dateOfBirth}
+```
+
+The PDF text layer gives us the exact X coordinate of each `{token}`. Say they are:
+
+```
+{firstName}    at X = 38
+{middleName}   at X = 180
+{lastName}     at X = 330
+{dateOfBirth}  at X = 488
+```
+
+The page width is 612 (standard US Letter).
+
+**Width calculation for each field:**
+
+| Token | X position | Next token X | Width formula | Result |
+|-------|-----------|-------------|---------------|--------|
+| `{firstName}` | 38 | 180 | 180 - 38 - 5 = 137 | **137px** |
+| `{middleName}` | 180 | 330 | 330 - 180 - 5 = 145 | **145px** |
+| `{lastName}` | 330 | 488 | 488 - 330 - 5 = 153 | **153px** |
+| `{dateOfBirth}` | 488 | (none) | 612 - 488 - 20 = 104 | **104px** |
+
+Each input box starts at the token's X and extends to just before the next token. The last field on the line extends to the right margin. The 5px gap between fields prevents overlap. The 20px right margin prevents the last field from running off the page.
+
+This is why the fields fit perfectly inside the form's printed boxes — the tokens are placed AT the position where data should appear, and the width is calculated from the distance to the next token.
 
 ### The problem that was fixed
 
-The old code used a "label anchor" strategy: for each `{token}`, it looked for a label text item to the LEFT and anchored the input field to the label's X position. This caused fields to overlap because `{firstName}` would anchor to the "First Name" label (far left) and stretch all the way to where `{middleName}` started.
+The old code used a "label anchor" strategy: for each `{token}`, it looked for a label text item to the LEFT (like the "First Name" label) and anchored the input field to the LABEL's X position instead of the TOKEN's X position. It also calculated widths during collection instead of after all tokens were found.
+
+This caused two problems:
+1. **Wrong start position**: `{firstName}` would anchor to the "First Name" label at X=5, not the token at X=38
+2. **Wrong width**: Since it hadn't found `{middleName}` yet, it would stretch to the page edge
+
+Result: firstName input at X=5, width=587 — covering the entire line, overlapping middleName, lastName, and dateOfBirth.
 
 ### The fix — two-pass width calculation
 
-1. **Pass 1**: Scan all lines, collect every `{token}` position into a `pendingFields` array. Record only the token's own X/Y position (where the `{` character appears in the text).
+The fix collects ALL token positions first (pass 1), then calculates widths (pass 2).
 
-2. **Pass 2**: After ALL tokens are collected, calculate each field's width by measuring the distance to the NEXT token on the same line:
+**Pass 1 — Collect positions**: Scan all lines on the page and record every `{token}`'s X/Y position in a `pendingFields` array. Do NOT calculate widths yet.
+
+```ts
+interface PendingField {
+  token: string;
+  mapping: { source: "patient" | "doctor" | "meta"; key: string };
+  x: number;      // X coordinate from PDF text layer
+  y: number;      // Y coordinate from PDF text layer
+  pageIndex: number;
+}
+
+const pendingFields: PendingField[] = [];
+
+// For each line, for each {token} match:
+pendingFields.push({ token, mapping, x, y, pageIndex });
+```
+
+**Pass 2 — Calculate widths**: After ALL tokens on the page are collected, loop through and compute each field's width based on the next token to its right on the same line:
+
+```ts
+for (const pf of pendingFields) {
+  // Find all tokens on the same line (within 3 PDF units of same Y) that are to the RIGHT
+  const sameLine = pendingFields.filter(
+    (other) => other.pageIndex === pf.pageIndex
+      && Math.abs(other.y - pf.y) < 3    // same horizontal line
+      && other.x > pf.x                   // to the right
+  );
+
+  // Width = distance to nearest right neighbor, minus 5px gap
+  const nextX = sameLine.length > 0 ? Math.min(...sameLine.map((f) => f.x)) : null;
+  const fieldWidth = nextX ? nextX - pf.x - 5 : viewport.width - pf.x - 20;
+
+  fields.push({
+    x: pf.x + offsets.x,
+    y: viewport.height - pf.y + offsets.y,    // PDF Y is bottom-up, canvas Y is top-down
+    width: Math.max(fieldWidth, 40),            // minimum 40px
+    value: resolveValue(pf.mapping.source, pf.mapping.key, data),
+    // ... other properties
+  });
+}
+```
+
+### How the Y coordinate works
+
+PDF coordinates have Y=0 at the BOTTOM of the page. Canvas/HTML coordinates have Y=0 at the TOP. The conversion is:
 
 ```
-Field width = nextTokenX - thisTokenX - 5px padding
+canvasY = viewport.height - pdfY
 ```
 
-If there's no next token on the line, the field extends to the right margin:
+This is applied when creating the final field object.
 
+### The "same line" detection
+
+Two text items are considered on the same line if their Y coordinates are within 3 PDF units of each other. This tolerance handles slight vertical misalignment in PDF text rendering:
+
+```ts
+Math.abs(other.y - pf.y) < 3
 ```
-Field width = pageWidth - thisTokenX - 20px padding
+
+### How token X position is calculated
+
+When `{firstName}` spans multiple PDF text items (e.g., the `{` is in one item and `firstName}` in the next), the system joins all items on a line into one string, runs the regex, then walks back through the items to find which item contains the match offset:
+
+```ts
+const fullText = line.map((i) => i.str).join("");
+// Regex finds {firstName} at character offset 12 in fullText
+// Walk items: item[0].str.length = 8, item[1].str.length = 15
+// Offset 12 is in item[1], at local position 12 - 8 = 4
+// X = item[1].x + (4 / item[1].str.length) * item[1].width
 ```
 
-Minimum width is 40px to prevent zero-width fields.
+This gives the precise X coordinate of the `{` character within the PDF, which is where the input overlay starts.
 
-This way, each field is sized to exactly fit between its token position and the next token — no overlap.
+### Minimum field width
+
+Fields are clamped to at least 40px wide to prevent zero-width or negative-width fields (which can happen if two tokens are placed very close together):
+
+```ts
+width: Math.max(fieldWidth, 40)
+```
+
+### Per-doctor coordinate offsets
+
+Some doctor PDF templates have slight coordinate misalignment. A correction table allows per-doctor pixel adjustments:
+
+```ts
+const DOCTOR_FORM_OFFSETS: Record<string, { x: number; y: number }> = {
+  'fore':   { x: 3,  y: -4 },
+  'foshee': { x: 0,  y: -3 },
+};
+```
+
+Key = doctor's last name lowercased. If no entry exists, offsets are `{ x: 0, y: 0 }`. Positive X shifts fields right, positive Y shifts fields down. Add entries as needed when testing new doctor templates.
 
 ---
 
