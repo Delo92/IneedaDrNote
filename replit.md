@@ -170,6 +170,20 @@ The complete end-to-end workflow:
 - `PUT /api/admin/users/:id` - Update user (Level 4+)
 - `GET /api/admin/applications` - List all applications (Level 3+)
 - `PUT /api/owner/config` - Update site config (Level 4)
+- `GET /api/forms/proxy-pdf` - Proxy external PDF URLs to avoid CORS
+- `GET /api/forms/data/:applicationId` - Get assembled form data for PDF auto-fill (patient + doctor + meta)
+- `POST /api/admin/doctor-templates/:doctorProfileId/gizmo-form` - Upload PDF form template for a doctor (Level 3+)
+
+### Gizmo PDF Auto-Fill System
+- **GizmoForm Component**: `client/src/components/shared/GizmoForm.tsx` — renders PDF with auto-filled fields
+- **Dual Mode Detection**: Auto-detects AcroForm fields (editable PDF forms) or `{placeholder}` tokens in PDF text
+- **AcroForm Mode**: Fills named form fields via normalized name matching (FIELD_NAME_MAP), dual-document pattern (flattened preview + editable download)
+- **Placeholder Mode**: Scans PDF text layer for `{token}` placeholders and `{radio_id_N}` tokens, renders overlay inputs/radio buttons
+- **Three-Pass Radio Detection**: Handles split radio tokens across PDF text items
+- **Canvas Retry Loop**: 5-retry loop for dialog animation (prevents null canvas crash)
+- **Doctor PDF Upload**: UserProfileModal Doctor tab has PDF upload UI (upload, preview with sample data, replace, remove)
+- **Key Libraries**: pdfjs-dist (v5.4.624) for rendering, pdf-lib for field manipulation
+- **ArrayBuffer Rule**: Always `.slice(0)` before passing to pdfjsLib.getDocument() or PDFDocument.load() to prevent detached buffer crashes
 
 ### Key Routes
 - `/` - Landing page

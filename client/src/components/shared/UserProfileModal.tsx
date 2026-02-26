@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,9 +25,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConfig } from "@/contexts/ConfigContext";
+import { auth } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, Application, UserNote } from "@shared/schema";
+import { GizmoForm } from "@/components/shared/GizmoForm";
+import type { GizmoFormData } from "@/components/shared/GizmoForm";
 import { 
   Loader2, 
   Mail, 
@@ -48,37 +51,12 @@ import {
   PhoneCall,
   Edit3,
   Stethoscope,
-  Info
+  Info,
+  Upload,
+  Eye,
+  Trash2
 } from "lucide-react";
 
-const PLACEHOLDERS_REFERENCE = [
-  { tag: "{{doctorName}}", desc: "Doctor's full name" },
-  { tag: "{{doctorLicense}}", desc: "License number" },
-  { tag: "{{doctorNPI}}", desc: "NPI number" },
-  { tag: "{{doctorDEA}}", desc: "DEA number" },
-  { tag: "{{doctorPhone}}", desc: "Doctor phone" },
-  { tag: "{{doctorFax}}", desc: "Doctor fax" },
-  { tag: "{{doctorAddress}}", desc: "Doctor address" },
-  { tag: "{{doctorSpecialty}}", desc: "Specialty" },
-  { tag: "{{doctorState}}", desc: "Doctor state" },
-  { tag: "{{patientName}}", desc: "Patient full name" },
-  { tag: "{{patientFirstName}}", desc: "First name" },
-  { tag: "{{patientLastName}}", desc: "Last name" },
-  { tag: "{{patientDOB}}", desc: "Date of birth" },
-  { tag: "{{patientPhone}}", desc: "Patient phone" },
-  { tag: "{{patientEmail}}", desc: "Patient email" },
-  { tag: "{{patientAddress}}", desc: "Patient street" },
-  { tag: "{{patientCity}}", desc: "Patient city" },
-  { tag: "{{patientState}}", desc: "Patient state" },
-  { tag: "{{patientZipCode}}", desc: "Patient zip" },
-  { tag: "{{patientSSN}}", desc: "Patient SSN" },
-  { tag: "{{patientDriverLicense}}", desc: "Driver license #" },
-  { tag: "{{patientMedicalCondition}}", desc: "Medical condition" },
-  { tag: "{{reason}}", desc: "Reason for note" },
-  { tag: "{{packageName}}", desc: "Note type name" },
-  { tag: "{{date}}", desc: "Today (long)" },
-  { tag: "{{dateShort}}", desc: "Today (short)" },
-];
 
 type ApplicationWithPackage = Application & {
   package?: { name: string; price: number };
@@ -104,7 +82,9 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
   const [newStatus, setNewStatus] = useState<string>("");
   const [newNote, setNewNote] = useState("");
   const [doctorProfileData, setDoctorProfileData] = useState<Record<string, any>>({});
-  const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const { data: userApplications, isLoading: appsLoading } = useQuery<ApplicationWithPackage[]>({
     queryKey: ["/api/admin/users", selectedUser?.id, "applications"],
@@ -170,7 +150,7 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
         address: doctorProfile.address || "",
         specialty: doctorProfile.specialty || "",
         state: doctorProfile.state || "",
-        formTemplate: doctorProfile.formTemplate || "",
+        gizmoFormUrl: doctorProfile.gizmoFormUrl || "",
         isActive: doctorProfile.isActive !== false,
       });
     } else if (selectedUser && isUserDoctor && !doctorProfileLoading) {
@@ -184,7 +164,7 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
         address: "",
         specialty: "",
         state: "",
-        formTemplate: "",
+        gizmoFormUrl: "",
         isActive: true,
       });
     }
@@ -268,6 +248,76 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
       data: doctorProfileData,
       userId: selectedUser.id,
     });
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !doctorProfile?.id) return;
+
+    if (file.type !== "application/pdf") {
+      toast({ title: "Invalid file", description: "Only PDF files are allowed", variant: "destructive" });
+      return;
+    }
+
+    try {
+      setUploadingPdf(true);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`/api/admin/doctor-templates/${doctorProfile.id}/gizmo-form`, {
+        method: "POST",
+        headers: {
+          ...(auth.currentUser ? { Authorization: `Bearer ${await auth.currentUser.getIdToken()}` } : {}),
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || "Upload failed");
+      }
+
+      const result = await response.json();
+      setDoctorProfileData((prev: Record<string, any>) => ({ ...prev, gizmoFormUrl: result.url }));
+      queryClient.invalidateQueries({ queryKey: ["/api/doctor-profiles"] });
+      toast({ title: "PDF Uploaded", description: "Form template uploaded successfully." });
+    } catch (err: any) {
+      toast({ title: "Upload Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingPdf(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  };
+
+  const previewFormData: GizmoFormData = {
+    success: true,
+    patientData: {
+      firstName: "John",
+      middleName: "A",
+      lastName: "Smith",
+      dateOfBirth: "1990-01-15",
+      address: "123 Main St",
+      city: "Oklahoma City",
+      state: "OK",
+      zipCode: "73101",
+      phone: "(555) 123-4567",
+      email: "john.smith@example.com",
+      medicalCondition: "Sample Condition",
+      driverLicenseNumber: "D12345678",
+      idExpirationDate: "12/31/2028",
+    },
+    doctorData: {
+      firstName: doctorProfileData.fullName?.split(" ")[0] || "",
+      lastName: doctorProfileData.fullName?.split(" ").slice(1).join(" ") || "",
+      phone: doctorProfileData.phone || "",
+      address: doctorProfileData.address || "",
+      state: doctorProfileData.state || "",
+      licenseNumber: doctorProfileData.licenseNumber || "",
+      npiNumber: doctorProfileData.npiNumber || "",
+    },
+    gizmoFormUrl: doctorProfileData.gizmoFormUrl || null,
+    generatedDate: new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
+    patientName: "John A Smith",
   };
 
   const handleOpenProfile = () => {
@@ -691,48 +741,90 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
 
                     <Separator />
 
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold flex items-center gap-2">
-                        <FileText className="h-5 w-5" /> Form Template
-                      </h3>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowPlaceholders(!showPlaceholders)}
-                        data-testid="button-toggle-placeholders-modal"
-                      >
-                        <Info className="h-4 w-4 mr-1" />
-                        {showPlaceholders ? "Hide" : "Show"} Placeholders
-                      </Button>
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <FileText className="h-5 w-5" /> PDF Form Template
+                    </h3>
+
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md text-sm">
+                      <div className="flex items-start gap-2">
+                        <Info className="h-4 w-4 mt-0.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                        <p className="text-blue-700 dark:text-blue-300">
+                          Upload a PDF form template for this doctor. The system auto-detects AcroForm fields or {"{placeholder}"} tokens and fills them with patient and doctor data when generating notes.
+                        </p>
+                      </div>
                     </div>
 
-                    {showPlaceholders && (
-                      <div className="border rounded-md p-3 bg-muted/50 max-h-40 overflow-y-auto">
-                        <div className="grid grid-cols-2 gap-1 text-xs">
-                          {PLACEHOLDERS_REFERENCE.map((p) => (
-                            <div key={p.tag} className="flex justify-between gap-2">
-                              <code className="text-primary font-mono">{p.tag}</code>
-                              <span className="text-muted-foreground">{p.desc}</span>
-                            </div>
-                          ))}
+                    {doctorProfileData.gizmoFormUrl ? (
+                      <div className="p-4 border rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                            <span className="text-sm font-medium">PDF Template Uploaded</span>
+                          </div>
+                          <Badge variant="secondary">Active</Badge>
                         </div>
+                        <p className="text-xs text-muted-foreground break-all">
+                          {doctorProfileData.gizmoFormUrl}
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowPdfPreview(true)}
+                            data-testid="button-preview-pdf"
+                          >
+                            <Eye className="h-4 w-4 mr-1" /> Preview
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => pdfInputRef.current?.click()}
+                            disabled={uploadingPdf}
+                            data-testid="button-replace-pdf"
+                          >
+                            {uploadingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                            Replace
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setDoctorProfileData((prev: Record<string, any>) => ({ ...prev, gizmoFormUrl: "" }));
+                            }}
+                            data-testid="button-remove-pdf"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" /> Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 border-2 border-dashed rounded-lg text-center space-y-3">
+                        <FileText className="h-10 w-10 mx-auto text-muted-foreground opacity-50" />
+                        <p className="text-sm text-muted-foreground">No PDF template uploaded yet</p>
+                        {!doctorProfile ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">Save the doctor profile first, then upload a PDF.</p>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            onClick={() => pdfInputRef.current?.click()}
+                            disabled={uploadingPdf}
+                            data-testid="button-upload-pdf"
+                          >
+                            {uploadingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                            Upload PDF Template
+                          </Button>
+                        )}
                       </div>
                     )}
 
-                    <div className="space-y-2">
-                      <Label>HTML Template</Label>
-                      <Textarea
-                        value={doctorProfileData.formTemplate || ""}
-                        onChange={(e) => setDoctorProfileData({ ...doctorProfileData, formTemplate: e.target.value })}
-                        placeholder={`<html>\n<body>\n  <h1>Doctor's Note</h1>\n  <p>Date: {{date}}</p>\n  <p>Doctor: {{doctorName}}</p>\n  <p>License: {{doctorLicense}}</p>\n  <p>Patient: {{patientName}}</p>\n  <p>DOB: {{patientDOB}}</p>\n  <p>Reason: {{reason}}</p>\n</body>\n</html>`}
-                        className="font-mono text-sm min-h-[200px]"
-                        data-testid="input-doctor-form-template"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        This template is used to generate the final document when this doctor approves a patient. Doctor credentials are pre-filled; patient data fills automatically.
-                      </p>
-                    </div>
+                    <input
+                      ref={pdfInputRef}
+                      type="file"
+                      accept=".pdf"
+                      className="hidden"
+                      onChange={handlePdfUpload}
+                      data-testid="input-pdf-file"
+                    />
 
                     <Button
                       onClick={handleSaveDoctorProfile}
@@ -951,6 +1043,20 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {showPdfPreview && doctorProfileData.gizmoFormUrl && (
+        <Dialog open={showPdfPreview} onOpenChange={setShowPdfPreview}>
+          <DialogContent className="max-w-5xl max-h-[95vh] overflow-auto">
+            <DialogHeader>
+              <DialogTitle>PDF Template Preview</DialogTitle>
+              <DialogDescription>
+                Preview with sample patient data. AcroForm fields or placeholders are auto-detected and filled.
+              </DialogDescription>
+            </DialogHeader>
+            <GizmoForm data={previewFormData} onClose={() => setShowPdfPreview(false)} />
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }
