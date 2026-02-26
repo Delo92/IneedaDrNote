@@ -50,18 +50,25 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Package } from "@shared/schema";
 import { Plus, Pencil, Trash2, Loader2, X, GripVertical } from "lucide-react";
 
+interface RadioOption {
+  radioId: string;
+  text: string;
+}
+
 interface CustomFormField {
   name: string;
   label: string;
   type: string;
   required: boolean;
   options?: string[];
+  radioOptions?: RadioOption[];
 }
 
 const FIELD_TYPES = [
   { value: "text", label: "Text" },
   { value: "textarea", label: "Text Area" },
   { value: "select", label: "Dropdown Select" },
+  { value: "radio", label: "Radio Buttons" },
   { value: "date", label: "Date" },
   { value: "email", label: "Email" },
   { value: "phone", label: "Phone" },
@@ -215,6 +222,65 @@ function CustomFieldEditor({
                       className="min-h-[60px]"
                       data-testid={`input-field-options-${index}`}
                     />
+                  </div>
+                )}
+
+                {field.type === "radio" && (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs text-muted-foreground">
+                      Each option maps to a specific radio button on the PDF. Enter just the number (e.g. 1, 2, 7) and the statement the patient will see.
+                    </p>
+                    {(field.radioOptions || []).map((ro, roIdx) => (
+                      <div key={roIdx} className="flex items-center gap-2">
+                        <Input
+                          placeholder="e.g. 1"
+                          value={ro.radioId}
+                          onChange={(e) => {
+                            const updated = [...(field.radioOptions || [])];
+                            updated[roIdx] = { ...updated[roIdx], radioId: e.target.value };
+                            updateField(index, { radioOptions: updated });
+                          }}
+                          className="w-24 flex-shrink-0"
+                          data-testid={`input-radio-id-${index}-${roIdx}`}
+                        />
+                        <Input
+                          placeholder="Statement shown to patient"
+                          value={ro.text}
+                          onChange={(e) => {
+                            const updated = [...(field.radioOptions || [])];
+                            updated[roIdx] = { ...updated[roIdx], text: e.target.value };
+                            updateField(index, { radioOptions: updated });
+                          }}
+                          className="flex-1"
+                          data-testid={`input-radio-text-${index}-${roIdx}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const updated = (field.radioOptions || []).filter((_, i) => i !== roIdx);
+                            updateField(index, { radioOptions: updated });
+                          }}
+                          data-testid={`button-remove-radio-option-${index}-${roIdx}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const updated = [...(field.radioOptions || []), { radioId: "", text: "" }];
+                        updateField(index, { radioOptions: updated });
+                      }}
+                      data-testid={`button-add-radio-option-${index}`}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Option
+                    </Button>
                   </div>
                 )}
 
@@ -379,6 +445,7 @@ export default function PackagesManagement() {
           type: f.type || "text",
           required: f.required || false,
           options: f.options,
+          radioOptions: f.radioOptions,
         }))
       : [];
     setCustomFields(existingFields);

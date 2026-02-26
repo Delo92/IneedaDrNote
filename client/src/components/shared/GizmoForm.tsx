@@ -19,6 +19,7 @@ export interface GizmoFormData {
   gizmoFormUrl: string | null;
   generatedDate: string;
   patientName: string;
+  selectedRadioIds?: string[];
 }
 
 interface PlaceholderField {
@@ -224,6 +225,7 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
   const extractPlaceholdersFromPdf = async (pdf: pdfjsLib.PDFDocumentProxy) => {
     const fields: PlaceholderField[] = [];
     const radios: RadioField[] = [];
+    const selectedRadioIds = new Set(data.selectedRadioIds || []);
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
@@ -325,19 +327,24 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
           }
 
           if (anchorItem) {
-            const x = anchorItem.transform[4] + offsets.x;
-            const y = viewport.height - anchorItem.transform[5] + offsets.y;
+            const num = parseInt(option, 10);
+            const radioOffsetX = num >= 6 && num <= 16 ? 1 : 0;
+            const radioOffsetY = num >= 6 && num <= 16 ? -5 : 0;
+            const x = anchorItem.transform[4] + offsets.x + radioOffsetX;
+            const y = viewport.height - anchorItem.transform[5] + offsets.y + radioOffsetY;
             const fontSize = anchorItem.height || 12;
 
-            let selected = false;
-            const autoFill = RADIO_AUTO_FILL[group];
-            if (autoFill) {
-              const patientVal = data.patientData[autoFill.sourceField] || "";
-              const expectedOption = autoFill.valueMap[patientVal];
-              if (expectedOption === option) {
-                selected = true;
-              } else if (!patientVal && autoFill.defaultOption === option) {
-                selected = true;
+            let selected = selectedRadioIds.has(option);
+            if (!selected) {
+              const autoFill = RADIO_AUTO_FILL[group];
+              if (autoFill) {
+                const patientVal = data.patientData[autoFill.sourceField] || "";
+                const expectedOption = autoFill.valueMap[patientVal];
+                if (expectedOption === option) {
+                  selected = true;
+                } else if (!patientVal && autoFill.defaultOption === option) {
+                  selected = true;
+                }
               }
             }
 
@@ -365,19 +372,24 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
         seenRadioOptions.add(option);
 
         const group = getRadioGroup(option);
-        const x = itemX + offsets.x;
-        const y = viewport.height - itemY + offsets.y;
+        const num = parseInt(option, 10);
+        const radioOffsetX = num >= 6 && num <= 16 ? 1 : 0;
+        const radioOffsetY = num >= 6 && num <= 16 ? -5 : 0;
+        const x = itemX + offsets.x + radioOffsetX;
+        const y = viewport.height - itemY + offsets.y + radioOffsetY;
         const fontSize = itemHeight || 12;
 
-        let selected = false;
-        const autoFill = RADIO_AUTO_FILL[group];
-        if (autoFill) {
-          const patientVal = data.patientData[autoFill.sourceField] || "";
-          const expectedOption = autoFill.valueMap[patientVal];
-          if (expectedOption === option) {
-            selected = true;
-          } else if (!patientVal && autoFill.defaultOption === option) {
-            selected = true;
+        let selected = selectedRadioIds.has(option);
+        if (!selected) {
+          const autoFill = RADIO_AUTO_FILL[group];
+          if (autoFill) {
+            const patientVal = data.patientData[autoFill.sourceField] || "";
+            const expectedOption = autoFill.valueMap[patientVal];
+            if (expectedOption === option) {
+              selected = true;
+            } else if (!patientVal && autoFill.defaultOption === option) {
+              selected = true;
+            }
           }
         }
 

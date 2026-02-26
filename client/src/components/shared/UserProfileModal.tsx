@@ -84,7 +84,20 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
   const [doctorProfileData, setDoctorProfileData] = useState<Record<string, any>>({});
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [selectedPdfState, setSelectedPdfState] = useState<string>("");
+  const [previewPdfState, setPreviewPdfState] = useState<string>("");
   const pdfInputRef = useRef<HTMLInputElement>(null);
+
+  const ALL_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
+    "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa",
+    "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan",
+    "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
+    "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio",
+    "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
+    "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
+    "Wisconsin", "Wyoming"
+  ];
 
   const { data: userApplications, isLoading: appsLoading } = useQuery<ApplicationWithPackage[]>({
     queryKey: ["/api/admin/users", selectedUser?.id, "applications"],
@@ -151,6 +164,7 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
         specialty: doctorProfile.specialty || "",
         state: doctorProfile.state || "",
         gizmoFormUrl: doctorProfile.gizmoFormUrl || "",
+        stateForms: doctorProfile.stateForms || {},
         isActive: doctorProfile.isActive !== false,
       });
     } else if (selectedUser && isUserDoctor && !doctorProfileLoading) {
@@ -165,6 +179,7 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
         specialty: "",
         state: "",
         gizmoFormUrl: "",
+        stateForms: {},
         isActive: true,
       });
     }
@@ -786,67 +801,79 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
                       </div>
                     </div>
 
-                    {doctorProfileData.gizmoFormUrl ? (
-                      <div className="p-4 border rounded-lg space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span className="text-sm font-medium">PDF Template Uploaded</span>
+                    {Object.keys(doctorProfileData.stateForms || {}).length > 0 && (
+                      <div className="space-y-2">
+                        {Object.entries(doctorProfileData.stateForms as Record<string, string>).map(([st, url]) => (
+                          <div key={st} className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-300">
+                                <CheckCircle className="h-4 w-4" />
+                                <span className="font-medium">{st}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => { setPreviewPdfState(st); setShowPdfPreview(true); }} data-testid={`button-preview-state-pdf-${st}`}>
+                                  <FileText className="h-3 w-3 mr-1" /> Preview & Fill
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-destructive" onClick={() => {
+                                  const updated = { ...doctorProfileData.stateForms };
+                                  delete updated[st];
+                                  setDoctorProfileData({ ...doctorProfileData, stateForms: updated });
+                                }} data-testid={`button-remove-state-pdf-${st}`}>
+                                  <Trash2 className="h-3 w-3 mr-1" /> Remove
+                                </Button>
+                              </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 truncate">{(url as string).split("/").pop()}</p>
                           </div>
-                          <Badge variant="secondary">Active</Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground break-all">
-                          {doctorProfileData.gizmoFormUrl}
-                        </p>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowPdfPreview(true)}
-                            data-testid="button-preview-pdf"
-                          >
-                            <Eye className="h-4 w-4 mr-1" /> Preview
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => pdfInputRef.current?.click()}
-                            disabled={uploadingPdf}
-                            data-testid="button-replace-pdf"
-                          >
-                            {uploadingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
-                            Replace
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setDoctorProfileData((prev: Record<string, any>) => ({ ...prev, gizmoFormUrl: "" }));
-                            }}
-                            data-testid="button-remove-pdf"
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" /> Remove
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 border-2 border-dashed rounded-lg text-center space-y-3">
-                        <FileText className="h-10 w-10 mx-auto text-muted-foreground opacity-50" />
-                        <p className="text-sm text-muted-foreground">No PDF template uploaded yet</p>
-                        <Button
-                          variant="outline"
-                          onClick={() => pdfInputRef.current?.click()}
-                          disabled={uploadingPdf}
-                          data-testid="button-upload-pdf"
-                        >
-                          {uploadingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
-                          Upload PDF Template
-                        </Button>
-                        {!doctorProfile && (
-                          <p className="text-xs text-muted-foreground">The doctor profile will be created automatically when you upload.</p>
-                        )}
+                        ))}
                       </div>
                     )}
+
+                    {doctorProfileData.gizmoFormUrl && (
+                      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm text-amber-700 dark:text-amber-300">Uploaded PDF</span>
+                          <Button variant="ghost" size="sm" className="text-destructive"
+                            onClick={() => setDoctorProfileData({ ...doctorProfileData, gizmoFormUrl: "" })} data-testid="button-clear-uploaded-pdf">
+                            <Trash2 className="h-3 w-3 mr-1" /> Clear
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">{doctorProfileData.gizmoFormUrl.split("/").pop()}</p>
+                        <Select value={selectedPdfState} onValueChange={(val) => {
+                          const updated = { ...(doctorProfileData.stateForms || {}), [val]: doctorProfileData.gizmoFormUrl };
+                          setDoctorProfileData({ ...doctorProfileData, stateForms: updated });
+                          setSelectedPdfState("");
+                        }}>
+                          <SelectTrigger className="mt-2" data-testid="select-assign-state">
+                            <SelectValue placeholder="Assign to state..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ALL_STATES.filter(s => !(doctorProfileData.stateForms || {})[s]).map(st => (
+                              <SelectItem key={st} value={st}>{st}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <div className="p-4 border-2 border-dashed rounded-lg text-center space-y-3">
+                      <FileText className="h-10 w-10 mx-auto text-muted-foreground opacity-50" />
+                      <p className="text-sm text-muted-foreground">
+                        {Object.keys(doctorProfileData.stateForms || {}).length > 0 ? "Upload another PDF for a different state" : "No PDF templates uploaded yet"}
+                      </p>
+                      <Button
+                        variant="outline"
+                        onClick={() => pdfInputRef.current?.click()}
+                        disabled={uploadingPdf}
+                        data-testid="button-upload-pdf"
+                      >
+                        {uploadingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                        Upload PDF Template
+                      </Button>
+                      {!doctorProfile && (
+                        <p className="text-xs text-muted-foreground">The doctor profile will be created automatically when you upload.</p>
+                      )}
+                    </div>
 
                     <input
                       ref={pdfInputRef}
@@ -1075,16 +1102,21 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
         </DialogFooter>
       </DialogContent>
 
-      {showPdfPreview && doctorProfileData.gizmoFormUrl && (
-        <Dialog open={showPdfPreview} onOpenChange={setShowPdfPreview}>
+      {showPdfPreview && (previewPdfState ? (doctorProfileData.stateForms || {})[previewPdfState] : doctorProfileData.gizmoFormUrl) && (
+        <Dialog open={showPdfPreview} onOpenChange={(open) => { setShowPdfPreview(open); if (!open) setPreviewPdfState(""); }}>
           <DialogContent className="max-w-5xl max-h-[95vh] overflow-auto">
             <DialogHeader>
-              <DialogTitle>PDF Template Preview</DialogTitle>
+              <DialogTitle>PDF Template Preview{previewPdfState ? ` - ${previewPdfState}` : ""}</DialogTitle>
               <DialogDescription>
                 Preview with sample patient data. AcroForm fields or placeholders are auto-detected and filled.
               </DialogDescription>
             </DialogHeader>
-            <GizmoForm data={previewFormData} onClose={() => setShowPdfPreview(false)} />
+            <GizmoForm data={{
+              ...previewFormData,
+              gizmoFormUrl: previewPdfState
+                ? (doctorProfileData.stateForms || {})[previewPdfState]
+                : doctorProfileData.gizmoFormUrl,
+            }} onClose={() => { setShowPdfPreview(false); setPreviewPdfState(""); }} />
           </DialogContent>
         </Dialog>
       )}

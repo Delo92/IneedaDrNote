@@ -2,9 +2,7 @@
 
 ## Overview
 
-This is a white-label asynchronous doctor's note purchasing service with a 4-tier user hierarchy. The platform handles patient applications, doctor review/approval, automated document generation, payments, messaging, and workflow automation. Built as a full-stack TypeScript application with React frontend, Express backend, and Firebase Firestore for data storage.
-
-The core workflow follows: Registration → Package Selection → Payment → Form Auto-Fill → Doctor Review/Approval → Auto-Document Generation → Completion.
+ChronicDocs is a white-label platform offering an asynchronous doctor's note purchasing service. It features a 4-tier user hierarchy and automates the entire workflow from patient application and payment to doctor review, document generation, and messaging. The platform aims to streamline the process of obtaining doctor's notes, providing a robust solution for both patients and medical professionals, with comprehensive workflow automation and white-label customization for various deployments.
 
 ## User Preferences
 
@@ -12,192 +10,53 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend Architecture
-- **Framework**: React 18 with TypeScript, bundled with Vite
-- **Routing**: Wouter (lightweight React router)
-- **State Management**: TanStack Query (React Query v5) for server state
-- **UI Components**: shadcn/ui with Radix UI primitives and Tailwind CSS
-- **Styling**: Tailwind CSS with CSS variables for theming (light/dark mode support)
-- **Code Splitting**: Lazy-loaded pages with React.lazy() and Suspense
+### Core Design
+The platform is a full-stack TypeScript application utilizing React for the frontend, Express.js for the backend, and Firebase Firestore as the primary data store. The workflow is automated, guiding users through registration, package selection, payment, form auto-fill, doctor review/approval, and automated document generation.
 
-The frontend uses a context-based architecture:
-- `AuthContext` - User authentication state and methods
-- `ConfigContext` - White-label configuration (site name, colors, role names)
-- `ThemeProvider` - Dark/light theme management
+### Frontend
+- **Framework**: React 18 with TypeScript, Vite, Wouter for routing.
+- **State Management**: TanStack Query for server state.
+- **UI/UX**: shadcn/ui with Radix UI and Tailwind CSS for a modern, customizable interface supporting light/dark modes.
+- **Architecture**: Context-based for authentication, white-label configuration, and theming.
 
-Path aliases are configured: `@/` for client/src, `@shared/` for shared code, `@assets/` for attached assets.
-
-### Backend Architecture
-- **Runtime**: Node.js with Express.js
-- **Language**: TypeScript with ES modules
-- **Authentication**: Firebase Auth (Bearer token) + bcrypt password hashing
-- **Email Service**: SendGrid (`@sendgrid/mail`) for transactional emails (`server/email.ts`)
-- **API Pattern**: RESTful endpoints under `/api/` prefix
+### Backend
+- **Runtime**: Node.js with Express.js.
+- **Language**: TypeScript.
+- **Authentication**: Firebase Auth with bcrypt for password hashing.
+- **Email Service**: SendGrid for transactional emails.
+- **API**: RESTful endpoints.
 
 ### Data Layer
-- **ORM**: Drizzle ORM with PostgreSQL dialect
-- **Schema Location**: `shared/schema.ts` (shared between frontend and backend)
-- **Migrations**: Drizzle Kit with `db:push` command for schema sync
-- **Validation**: Zod schemas generated from Drizzle schemas via drizzle-zod
+- **ORM**: Drizzle ORM with PostgreSQL dialect.
+- **Schema**: Shared between frontend and backend using `shared/schema.ts`.
+- **Validation**: Zod schemas generated from Drizzle.
 
 ### User Hierarchy (4 Levels)
-1. **Level 1 - Patient**: End users who purchase doctor's notes and submit applications
-2. **Level 2 - Doctor**: Reviews applications, approves/denies, handles work queue (merged from old Reviewer+Agent)
-3. **Level 3 - Admin**: Manage users, packages, verification queue, and system settings
-4. **Level 4 - Owner**: Full platform control, white-label configuration
+1.  **Patient**: Purchases notes, submits applications.
+2.  **Doctor**: Reviews applications, approves/denies.
+3.  **Admin**: Manages users, packages, queues, settings.
+4.  **Owner**: Full platform control, white-label configuration.
+Role names are configurable.
 
-Role names are configurable per deployment via the `siteConfig` table.
-
-### Key Data Models
-- `users` - All platform users with role levels
-- `packages` - Service offerings with pricing
-- `applications` - User applications linked to packages
-- `applicationSteps` - Workflow step tracking
-- `documents` - File uploads and document management
-- `messages` - Internal messaging system
-- `payments` - Payment records
-- `commissions` - Referral/agent commission tracking
-- `notifications` - User notifications
-- `activityLogs` - Audit trail
-- `siteConfig` - White-label customization
-- `doctorProfiles` - Doctor credentials (license, NPI, DEA, phone, fax, address, specialty)
-- `autoMessageTriggers` - Automated messages triggered on application status changes
-
-### Build System
-- **Development**: Vite dev server with HMR, proxied through Express
-- **Production**: Vite builds to `dist/public`, esbuild bundles server to `dist/index.cjs`
-- **Bundling Strategy**: Server dependencies in allowlist are bundled to reduce cold start times
+### Key Features
+-   **Automated Application Workflow**: From submission to document generation, including doctor assignment via round-robin.
+-   **Doctor Review Token System**: Secure, token-based asynchronous review process via email links for doctors, eliminating login requirements.
+-   **White-Label Customization**: Owners can configure branding, role names, contact info, and more.
+-   **Payment Processing**: Integrated Authorize.Net for credit card payments, with client-side tokenization.
+-   **PDF Auto-Fill System (Gizmo)**: Renders and auto-fills PDF forms based on patient data, supporting both AcroForm fields and placeholder tokens. Doctors can upload state-specific PDF templates.
+-   **Role-Based Dashboards**: Unique dashboards for each user level with tailored functionalities.
+-   **Comprehensive User and Application Management**: Admins can manage users, applications, and settings.
+-   **Draft Saving**: Patients can save application progress.
 
 ## External Dependencies
 
-### Database
-- **Firebase Firestore**: Primary data store via Firebase Admin SDK
-- **Connection**: Firebase service account key via `FIREBASE_SERVICE_ACCOUNT_KEY` secret
-
-### Frontend Libraries
-- **UI Framework**: shadcn/ui (Radix UI + Tailwind)
-- **Forms**: react-hook-form with @hookform/resolvers and Zod
-- **Date Handling**: date-fns
-- **Charts**: Recharts (via shadcn chart component)
-
-### Backend Libraries
-- **Authentication**: bcryptjs for password hashing, Firebase Admin SDK for token verification
-- **Email**: @sendgrid/mail for transactional emails (doctor approval, admin notification, patient approval)
-- **File Uploads**: multer for multipart form data (gallery image uploads stored in Firebase Storage)
-
-### Development Tools
-- **Replit Plugins**: @replit/vite-plugin-runtime-error-modal, cartographer, dev-banner
-- **TypeScript**: Strict mode with module bundler resolution
-
-### Environment Variables Required
-- `FIREBASE_SERVICE_ACCOUNT_KEY` - Firebase service account JSON (required)
-- `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_PROJECT_ID` - Firebase client config
-- `SENDGRID_API_KEY` - SendGrid API key for transactional emails (optional, emails skipped if not set)
-- `SENDGRID_FROM_EMAIL` - From email address for SendGrid (defaults to noreply@ineedadrnote.com)
-
-## Current Implementation Status
-
-### Completed Features
-- **Authentication**: Firebase Auth (Bearer token) + bcrypt password hashing (no sessions)
-- **Extended Registration**: Full registration form collecting personal info, address, medical info, and 4 required consent checkboxes
-- **Profile Management**: Self-service profile page (`/dashboard/applicant/registration`) with completeness tracking (green/amber banners)
-- **Profile Gate**: NewApplication blocks access until profile is complete (12 required fields + consents)
-- **Auto-Fill Application**: Profile data auto-fills into application formData so doctors see everything
-- **Auto-Send to Doctor**: Applications automatically assigned to doctors via round-robin on submission
-- **SendGrid Email Notifications**: Doctor approval email, admin notification email, patient approval email, doctor completion copy email
-- **Package Custom Fields**: Admin can define per-package custom form fields (text, textarea, select, date, etc.)
-- **Admin Notification Email**: Configurable admin email that receives copies of all approval requests
-- **Auto-Complete Applications**: Admin toggle to skip doctor review — auto-approves, generates document, emails patient + doctor copy
-- **Price Display**: Prices stored as cents, displayed as dollars with /100 conversion throughout UI
-- **Contact Email Separation**: Users have separate sign-in email (immutable) and contact email (for notifications/receipts)
-- **Manual Payment**: Admin green $ button on Users page — creates full application for a patient as if they paid, runs through auto-complete or doctor review pipeline
-- **4 Role-Based Dashboards**: Each with unique stats, actions, and navigation
-- **Doctor Review Token System**: Secure token-based async doctor review via email links
-- **Owner Configuration**: Full white-label settings (branding, role names, contact info, hero, gallery)
-- **Admin User Management**: Search, filter, and edit user levels/status
-- **Dark/Light Theme**: System-aware with manual toggle
-
-### Application Processing Workflow (Fully Automated)
-
-The complete end-to-end workflow:
-
-1. Patient registers with full profile (personal info, address, medical info, 4 consents)
-2. Patient selects note type (package) → fills reason + package-specific custom fields
-3. On submit with `autoSendToDoctor: true`:
-   - Round-robin picks next active doctor from `doctorProfiles`
-   - Checks `adminSettings.autoCompleteApplications` toggle:
-   - **If Auto-Complete ON**: Auto-approves, generates document, emails patient + doctor copy, emails admin (status: `doctor_approved`)
-   - **If Auto-Complete OFF**: Creates 32-byte token with 7-day expiry, sends review email to doctor + admin
-4. Doctor opens review link (no login required), reviews patient data, approves or denies
-   - If **approved** → Auto-generates document, sends patient email + in-app notification (status: `doctor_approved`)
-   - If **denied** → Sends in-app notification with reason (status: `doctor_denied`)
-5. Admin can also manually trigger "Send to Doctor" from orders page (sends same emails)
-
-**Application Status Values:**
-- `pending` - New application, awaiting admin action
-- `doctor_review` - Sent to doctor, awaiting review via token link
-- `doctor_approved` - Approved by doctor, documents auto-generated
-- `doctor_denied` - Denied by doctor
-- `completed` - Fully completed
-- `rejected` - Application rejected
-
-### Doctor Review Token System
-- **Token Generation**: 32-byte cryptographic random tokens, 7-day expiry
-- **Public Portal**: `/review/:token` - doctors review without login, token IS the auth
-- **Round-Robin Assignment**: Auto-assigns to next active doctor based on adminSettings.lastAssignedDoctorId
-- **Admin Workflow**: "Send to Doctor" button on Orders page generates token and shows copyable review link
-- **Auto-Complete Pipeline**: Doctor approval triggers document generation and auto-message triggers
-- **Security**: Single-use tokens, expiry enforcement, status checks on GET and POST endpoints
-- **Firestore Collection**: `doctorReviewTokens` stores token records with applicationId, doctorId, status, expiresAt
-
-### API Endpoints
-- `POST /api/auth/register` - User registration (extended: all profile fields + consents)
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/me` - Get current user
-- `GET /api/profile` - Get user profile (authenticated)
-- `PUT /api/profile` - Update user profile (authenticated)
-- `GET /api/config` - Get site configuration
-- `GET /api/packages` - List active packages
-- `GET /api/applications` - Get user's applications
-- `POST /api/applications` - Create new application (supports `autoSendToDoctor` flag)
-- `GET /api/admin/settings` - Get admin settings (Level 3+)
-- `PUT /api/admin/settings` - Update admin settings (Level 3+)
-- `GET /api/doctors` - List active doctors (Level 3+)
-- `GET /api/doctors/stats` - Get doctor review stats (Level 2+)
-- `POST /api/admin/applications/:id/send-to-doctor` - Send application to doctor for review with emails (Level 3+)
-- `GET /api/review/:token` - Get review data by token (public, no auth)
-- `POST /api/review/:token/decision` - Submit doctor decision + trigger emails (public, no auth, token is auth)
-- `GET /api/commissions` - Get commissions (Level 2+)
-- `GET /api/admin/users` - List all users (Level 4+)
-- `PUT /api/admin/users/:id` - Update user (Level 4+)
-- `GET /api/admin/applications` - List all applications (Level 3+)
-- `PUT /api/owner/config` - Update site config (Level 4)
-- `GET /api/forms/proxy-pdf` - Proxy external PDF URLs to avoid CORS
-- `GET /api/forms/data/:applicationId` - Get assembled form data for PDF auto-fill (patient + doctor + meta)
-- `POST /api/admin/doctor-templates/:doctorProfileId/gizmo-form` - Upload PDF form template for a doctor (Level 3+)
-
-### Gizmo PDF Auto-Fill System
-- **GizmoForm Component**: `client/src/components/shared/GizmoForm.tsx` — renders PDF with auto-filled fields
-- **Dual Mode Detection**: Auto-detects AcroForm fields (editable PDF forms) or `{placeholder}` tokens in PDF text
-- **AcroForm Mode**: Fills named form fields via normalized name matching (FIELD_NAME_MAP), dual-document pattern (flattened preview + editable download)
-- **Placeholder Mode**: Scans PDF text layer for `{token}` placeholders and `{radio_id_N}` tokens, renders overlay inputs/radio buttons
-- **Three-Pass Radio Detection**: Handles split radio tokens across PDF text items
-- **Canvas Retry Loop**: 5-retry loop for dialog animation (prevents null canvas crash)
-- **Doctor PDF Upload**: UserProfileModal Doctor tab has PDF upload UI (upload, preview with sample data, replace, remove)
-- **Key Libraries**: pdfjs-dist (v5.4.624) for rendering, pdf-lib for field manipulation
-- **ArrayBuffer Rule**: Always `.slice(0)` before passing to pdfjsLib.getDocument() or PDFDocument.load() to prevent detached buffer crashes
-
-### Key Routes
-- `/` - Landing page
-- `/login`, `/register` - Authentication
-- `/packages` - Service packages listing
-- `/review/:token` - Public doctor review portal (no login required)
-- `/dashboard/applicant` - Patient dashboard
-- `/dashboard/applicant/applications/new` - New application wizard
-- `/dashboard/doctor` - Doctor dashboard with review stats
-- `/dashboard/admin` - Admin dashboard
-- `/dashboard/admin/applications` - Orders management with "Send to Doctor"
-- `/dashboard/admin/users` - User management
-- `/dashboard/owner` - Owner dashboard
-- `/dashboard/owner/site-settings` - White-label configuration
+-   **Database**: Firebase Firestore (primary data store).
+-   **Email**: SendGrid (`@sendgrid/mail`).
+-   **Payment Gateway**: Authorize.Net (via Accept.js for client-side tokenization).
+-   **UI Libraries**: shadcn/ui, Radix UI, Tailwind CSS.
+-   **Form Management**: react-hook-form, Zod.
+-   **Date Utilities**: date-fns.
+-   **Charting**: Recharts.
+-   **PDF Processing**: pdfjs-dist, pdf-lib.
+-   **Authentication**: bcryptjs, Firebase Admin SDK.
+-   **File Uploads**: multer (for gallery images, stored in Firebase Storage).

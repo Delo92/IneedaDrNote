@@ -20,13 +20,14 @@ import {
 } from "@/components/ui/dialog";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
-import { FileText, Search, Clock, CheckCircle, XCircle, Send, Copy, Link, Loader2, Stethoscope } from "lucide-react";
+import { FileText, Search, Clock, CheckCircle, XCircle, Send, Copy, Link, Loader2, Stethoscope, DollarSign } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 function statusBadge(status: string) {
   const variants: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+    awaiting_payment: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
     doctor_review: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
     doctor_approved: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
     doctor_denied: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
@@ -35,6 +36,7 @@ function statusBadge(status: string) {
   };
   const labels: Record<string, string> = {
     pending: "Pending",
+    awaiting_payment: "Payment Pending",
     doctor_review: "Doctor Review",
     doctor_approved: "Doctor Approved",
     doctor_denied: "Doctor Denied",
@@ -58,6 +60,7 @@ export default function ApplicationsListPage() {
     url: "",
     doctorName: "",
   });
+  const [processingPaymentId, setProcessingPaymentId] = useState<string | null>(null);
 
   const { data: applications, isLoading } = useQuery<any[]>({
     queryKey: ["/api/applications"],
@@ -79,6 +82,32 @@ export default function ApplicationsListPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const processPaymentMutation = useMutation({
+    mutationFn: async (applicationId: string) => {
+      const res = await apiRequest("POST", `/api/admin/applications/${applicationId}/process-payment`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Payment Processed",
+        description: data.message || "Application payment confirmed and sent for review.",
+      });
+      if (data.reviewUrl && data.doctor) {
+        setReviewLinkDialog({ open: true, url: data.reviewUrl, doctorName: data.doctor.name || "Doctor" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
+      setProcessingPaymentId(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process payment",
+        variant: "destructive",
+      });
+      setProcessingPaymentId(null);
     },
   });
 
@@ -104,6 +133,7 @@ export default function ApplicationsListPage() {
   const inReview = (applications || []).filter(a => a.status === "doctor_review").length;
   const approved = (applications || []).filter(a => ["doctor_approved", "completed"].includes(a.status)).length;
   const denied = (applications || []).filter(a => ["doctor_denied", "rejected"].includes(a.status)).length;
+  const awaitingPayment = (applications || []).filter(a => a.status === "awaiting_payment").length;
 
   return (
     <DashboardLayout>
@@ -119,7 +149,7 @@ export default function ApplicationsListPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
               <CardTitle className="text-sm font-medium">Total</CardTitle>
@@ -128,6 +158,16 @@ export default function ApplicationsListPage() {
             <CardContent>
               <div className="text-2xl font-bold">{applications?.length || 0}</div>
               <p className="text-xs text-muted-foreground">All orders</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+              <CardTitle className="text-sm font-medium">Awaiting Payment</CardTitle>
+              <DollarSign className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{awaitingPayment}</div>
+              <p className="text-xs text-muted-foreground">Need payment</p>
             </CardContent>
           </Card>
           <Card>
@@ -185,6 +225,7 @@ export default function ApplicationsListPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="awaiting_payment">Awaiting Payment</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="doctor_review">Doctor Review</SelectItem>
                   <SelectItem value="doctor_approved">Approved</SelectItem>
@@ -244,6 +285,25 @@ export default function ApplicationsListPage() {
                             <Send className="h-4 w-4 mr-2" />
                           )}
                           Send to Doctor
+                        </Button>
+                      )}
+                      {isAdmin && app.status === "awaiting_payment" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setProcessingPaymentId(app.id);
+                            processPaymentMutation.mutate(app.id);
+                          }}
+                          disabled={processPaymentMutation.isPending && processingPaymentId === app.id}
+                          data-testid={`button-process-payment-${app.id}`}
+                        >
+                          {processPaymentMutation.isPending && processingPaymentId === app.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : (
+                            <DollarSign className="h-4 w-4 mr-1" />
+                          )}
+                          Process Payment
                         </Button>
                       )}
                       {app.status === "doctor_review" && (
