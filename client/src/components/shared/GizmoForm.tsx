@@ -120,7 +120,7 @@ const PLACEHOLDER_MAP: Record<string, { source: "patient" | "doctor" | "meta"; k
 
 const DOCTOR_FORM_OFFSETS: Record<string, { x: number; y: number }> = {};
 
-const RADIO_AUTO_FILL: Record<string, { sourceField: string; valueMap: Record<string, string> }> = {
+const RADIO_AUTO_FILL: Record<string, { sourceField: string; valueMap: Record<string, string>; defaultOption?: string }> = {
   idtype: {
     sourceField: "idType",
     valueMap: {
@@ -132,6 +132,7 @@ const RADIO_AUTO_FILL: Record<string, { sourceField: string; valueMap: Record<st
   },
   condition: {
     sourceField: "disabilityCondition",
+    defaultOption: "7",
     valueMap: {
       A: "7",
       B: "8",
@@ -335,6 +336,8 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
               const expectedOption = autoFill.valueMap[patientVal];
               if (expectedOption === option) {
                 selected = true;
+              } else if (!patientVal && autoFill.defaultOption === option) {
+                selected = true;
               }
             }
 
@@ -372,6 +375,8 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
           const patientVal = data.patientData[autoFill.sourceField] || "";
           const expectedOption = autoFill.valueMap[patientVal];
           if (expectedOption === option) {
+            selected = true;
+          } else if (!patientVal && autoFill.defaultOption === option) {
             selected = true;
           }
         }
