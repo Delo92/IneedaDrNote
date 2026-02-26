@@ -278,7 +278,7 @@ export default function PackagesManagement() {
       const validFields = customFields.filter((f) => f.label.trim() && f.name.trim());
       const response = await apiRequest("POST", "/api/admin/packages", {
         ...data,
-        price: parseFloat(data.price),
+        price: Math.round(parseFloat(data.price) * 100),
         features: data.features ? data.features.split("\n").filter(Boolean) : [],
         formFields: validFields,
       });
@@ -308,7 +308,7 @@ export default function PackagesManagement() {
       const validFields = customFields.filter((f) => f.label.trim() && f.name.trim());
       const response = await apiRequest("PUT", `/api/admin/packages/${id}`, {
         ...data,
-        price: parseFloat(data.price),
+        price: Math.round(parseFloat(data.price) * 100),
         features: data.features ? data.features.split("\n").filter(Boolean) : [],
         formFields: validFields,
       });
@@ -386,7 +386,7 @@ export default function PackagesManagement() {
     form.reset({
       name: pkg.name,
       description: pkg.description || "",
-      price: pkg.price.toString(),
+      price: (Number(pkg.price) / 100).toFixed(2),
       features: Array.isArray(pkgAny.features) ? pkgAny.features.join("\n") : "",
       processingTime: pkgAny.processingTime || "",
       requiresLevel2Interaction: pkg.requiresLevel2Interaction || false,
@@ -460,7 +460,7 @@ export default function PackagesManagement() {
                             <TableCell className="max-w-xs truncate">
                               {pkg.description || "-"}
                             </TableCell>
-                            <TableCell>${Number(pkg.price).toFixed(2)}</TableCell>
+                            <TableCell>${(Number(pkg.price) / 100).toFixed(2)}</TableCell>
                             <TableCell>
                               {fieldCount > 0 ? (
                                 <Badge variant="secondary" data-testid={`badge-fields-count-${pkg.id}`}>

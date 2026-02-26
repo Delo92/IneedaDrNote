@@ -104,9 +104,12 @@ Role names are configurable per deployment via the `siteConfig` table.
 - **Profile Gate**: NewApplication blocks access until profile is complete (12 required fields + consents)
 - **Auto-Fill Application**: Profile data auto-fills into application formData so doctors see everything
 - **Auto-Send to Doctor**: Applications automatically assigned to doctors via round-robin on submission
-- **SendGrid Email Notifications**: Doctor approval email, admin notification email, patient approval email
+- **SendGrid Email Notifications**: Doctor approval email, admin notification email, patient approval email, doctor completion copy email
 - **Package Custom Fields**: Admin can define per-package custom form fields (text, textarea, select, date, etc.)
 - **Admin Notification Email**: Configurable admin email that receives copies of all approval requests
+- **Auto-Complete Applications**: Admin toggle to skip doctor review — auto-approves, generates document, emails patient + doctor copy
+- **Price Display**: Prices stored as cents, displayed as dollars with /100 conversion throughout UI
+- **Contact Email Separation**: Users have separate sign-in email (immutable) and contact email (for notifications/receipts)
 - **4 Role-Based Dashboards**: Each with unique stats, actions, and navigation
 - **Doctor Review Token System**: Secure token-based async doctor review via email links
 - **Owner Configuration**: Full white-label settings (branding, role names, contact info, hero, gallery)
@@ -121,10 +124,9 @@ The complete end-to-end workflow:
 2. Patient selects note type (package) → fills reason + package-specific custom fields
 3. On submit with `autoSendToDoctor: true`:
    - Round-robin picks next active doctor from `doctorProfiles`
-   - Creates 32-byte token with 7-day expiry
-   - Sets application status to `doctor_review`
-   - Sends email to assigned doctor with "Review & Approve" button
-   - Sends email to admin notification email (if configured) with same approve button
+   - Checks `adminSettings.autoCompleteApplications` toggle:
+   - **If Auto-Complete ON**: Auto-approves, generates document, emails patient + doctor copy, emails admin (status: `doctor_approved`)
+   - **If Auto-Complete OFF**: Creates 32-byte token with 7-day expiry, sends review email to doctor + admin
 4. Doctor opens review link (no login required), reviews patient data, approves or denies
    - If **approved** → Auto-generates document, sends patient email + in-app notification (status: `doctor_approved`)
    - If **denied** → Sends in-app notification with reason (status: `doctor_denied`)
