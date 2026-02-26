@@ -2195,18 +2195,17 @@ export async function registerRoutes(
           return;
         }
 
-        const uploadsDir = path.join(process.cwd(), "uploads", "doctor-forms");
-        if (!fs.existsSync(uploadsDir)) {
-          fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-
+        const bucket = firebaseStorage.bucket();
         const uniqueSuffix = Date.now() + "-" + randomBytes(4).toString("hex");
-        const fileName = `${doctorProfileId}-${uniqueSuffix}.pdf`;
-        const filePath = path.join(uploadsDir, fileName);
+        const fileName = `doctor-gizmo-forms/${doctorProfileId}/${uniqueSuffix}.pdf`;
+        const file = bucket.file(fileName);
 
-        fs.writeFileSync(filePath, req.file.buffer);
+        await file.save(req.file.buffer, {
+          metadata: { contentType: "application/pdf" },
+        });
 
-        const url = `/uploads/doctor-forms/${fileName}`;
+        await file.makePublic();
+        const url = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
 
         await storage.updateDoctorProfile(doctorProfileId, { gizmoFormUrl: url });
 
