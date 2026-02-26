@@ -158,6 +158,25 @@ function normalizeFieldName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+async function checkForPlaceholderTokens(pdf: pdfjsLib.PDFDocumentProxy): Promise<boolean> {
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const allText = textContent.items
+      .filter((item): item is { str: string; transform: number[]; width: number; height: number } => "str" in item)
+      .map((item) => item.str)
+      .join("");
+
+    if (/\{(firstName|lastName|middleName|dateOfBirth|address|city|state|zipCode|zip|phone|email|date|driverLicenseNumber|medicalCondition|idNumber|suffix|apt)\}?/i.test(allText)) {
+      return true;
+    }
+    if (/\{radio[_\s]/i.test(allText) || /radio\s*_?\s*id/i.test(allText)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function resolveValue(
   source: "patient" | "doctor" | "meta",
   key: string,
@@ -240,11 +259,12 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
         line.sort((a, b) => a.transform[4] - b.transform[4]);
         const fullText = line.map((i) => i.str).join("");
 
-        const placeholderRegex = /\{([a-zA-Z]+)\}/g;
+        const placeholderRegex = /\{([a-zA-Z]+)\}?/g;
         let match;
         while ((match = placeholderRegex.exec(fullText)) !== null) {
-          const token = match[0];
-          const mapping = PLACEHOLDER_MAP[token];
+          const tokenWithBrace = `{${match[1]}}`;
+          const mapping = PLACEHOLDER_MAP[tokenWithBrace];
+          const token = tokenWithBrace;
 
           if (mapping) {
             let charPos = 0;
@@ -443,6 +463,15 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
       const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(originalBytes.slice(0)) }).promise;
       setPdfDoc(pdf);
       setTotalPages(pdf.numPages);
+
+      const hasPlaceholders = await checkForPlaceholderTokens(pdf);
+
+      if (hasPlaceholders) {
+        setMode("placeholder");
+        await extractPlaceholdersFromPdf(pdf);
+        setLoading(false);
+        return;
+      }
 
       const { PDFDocument } = await import("pdf-lib");
       const pdfLibDoc = await PDFDocument.load(originalBytes.slice(0));

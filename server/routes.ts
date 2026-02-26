@@ -2139,15 +2139,16 @@ export async function registerRoutes(
         idType: formData.idType || "",
       };
 
+      const nameParts = (doctorProfile?.fullName || "").split(" ").filter(Boolean);
       const doctorData: Record<string, string> = {
-        firstName: doctorProfile?.fullName?.split(" ")[0] || "",
-        middleName: "",
-        lastName: doctorProfile?.fullName?.split(" ").slice(-1)[0] || "",
+        firstName: nameParts[0] || "",
+        middleName: nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : "",
+        lastName: nameParts.length > 1 ? nameParts[nameParts.length - 1] : "",
         phone: doctorProfile?.phone || "",
         address: doctorProfile?.address || "",
-        city: "",
+        city: doctorProfile?.city || "",
         state: doctorProfile?.state || "",
-        zipCode: "",
+        zipCode: doctorProfile?.zipCode || doctorProfile?.zip || "",
         licenseNumber: doctorProfile?.licenseNumber || "",
         npiNumber: doctorProfile?.npiNumber || "",
       };
