@@ -118,7 +118,7 @@ function ensureInitialized(): App {
       clientEmail: creds.clientEmail,
       privateKey: creds.privateKey,
     }),
-    storageBucket: `${creds.projectId}.firebasestorage.app`,
+    storageBucket: `${creds.projectId}.appspot.com`,
   });
 
   return _app;
