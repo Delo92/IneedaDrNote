@@ -6,7 +6,27 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Download, FileText, Loader2, Eye, RefreshCw, CheckCircle } from "lucide-react";
+import {
+  Download,
+  FileText,
+  Loader2,
+  RefreshCw,
+  CheckCircle,
+  Printer,
+  ZoomIn,
+  ZoomOut,
+  ArrowLeft,
+} from "lucide-react";
+let pdfjsLibInstance: typeof import("pdfjs-dist") | null = null;
+
+async function getPdfjsLib() {
+  if (pdfjsLibInstance) return pdfjsLibInstance;
+  const pdfjsLib = await import("pdfjs-dist");
+  const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  pdfjsLibInstance = pdfjsLib;
+  return pdfjsLib;
+}
 
 const FIELD_NAME_MAP: Record<string, { source: "patient" | "doctor" | "meta"; key: string }> = {
   firstname: { source: "patient", key: "firstName" },
@@ -25,6 +45,12 @@ const FIELD_NAME_MAP: Record<string, { source: "patient" | "doctor" | "meta"; ke
   email: { source: "patient", key: "email" },
   medicalcondition: { source: "patient", key: "medicalCondition" },
   idnumber: { source: "patient", key: "idNumber" },
+  driverlicensenumber: { source: "patient", key: "driverLicenseNumber" },
+  driverlicense: { source: "patient", key: "driverLicenseNumber" },
+  dlnumber: { source: "patient", key: "driverLicenseNumber" },
+  driverslicense: { source: "patient", key: "driverLicenseNumber" },
+  driverslicensenumber: { source: "patient", key: "driverLicenseNumber" },
+  driverlicensestateidentificationcardnumber: { source: "patient", key: "driverLicenseNumber" },
   idexpirationdate: { source: "patient", key: "idExpirationDate" },
   date: { source: "meta", key: "generatedDate" },
   doctorfirstname: { source: "doctor", key: "firstName" },
@@ -55,6 +81,8 @@ const PLACEHOLDER_MAP: Record<string, { source: "patient" | "doctor" | "meta"; k
   "{email}": { source: "patient", key: "email" },
   "{medicalCondition}": { source: "patient", key: "medicalCondition" },
   "{idNumber}": { source: "patient", key: "idNumber" },
+  "{driverLicenseNumber}": { source: "patient", key: "driverLicenseNumber" },
+  "{dlNumber}": { source: "patient", key: "driverLicenseNumber" },
   "{idExpirationDate}": { source: "patient", key: "idExpirationDate" },
   "{date}": { source: "meta", key: "generatedDate" },
   "{doctorFirstName}": { source: "doctor", key: "firstName" },
@@ -70,25 +98,32 @@ const PLACEHOLDER_MAP: Record<string, { source: "patient" | "doctor" | "meta"; k
 };
 
 const RADIO_AUTO_FILL: Record<string, { sourceField: string; valueMap: Record<string, string> }> = {
-  idtype: {
-    sourceField: "idType",
+  condition: {
+    sourceField: "disabilityCondition",
     valueMap: {
-      drivers_license: "dl",
-      us_passport_photo_id: "passport",
-      id_card: "idcard",
-      tribal_id_card: "tribal",
+      A: "7",
+      B: "8",
+      C: "9",
+      D: "10",
+      E: "11",
+      F: "12",
+      G: "13",
+      H: "14",
     },
   },
 };
 
-const DOCTOR_FORM_OFFSETS: Record<string, { x: number; y: number }> = {
-  fore: { x: 3, y: -4 },
-  foshee: { x: 0, y: -3 },
-};
+function getRadioGroup(option: string): string {
+  const num = parseInt(option, 10);
+  if (num >= 1 && num <= 3) return "placardtype";
+  if (num >= 4 && num <= 5) return "placardcount";
+  if (num >= 7 && num <= 14) return "condition";
+  if (num >= 15 && num <= 16) return "duration";
+  return "other";
+}
 
 export interface GizmoFormData {
   success: boolean;
-  gizmoFormLayout?: "A" | "B";
   patientData: Record<string, string>;
   doctorData: Record<string, string>;
   gizmoFormUrl: string | null;
@@ -137,6 +172,13 @@ function normalizeFieldName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+interface TextItem {
+  str: string;
+  transform: number[];
+  width: number;
+  height: number;
+}
+
 interface GizmoFormProps {
   data: GizmoFormData;
   onClose?: () => void;
@@ -157,7 +199,8 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
   const [pageCount, setPageCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [downloading, setDownloading] = useState(false);
-  const [scale, setScale] = useState(1.0);
+  const [printing, setPrinting] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(100);
 
   const loadPdf = useCallback(async () => {
     if (!data.gizmoFormUrl) {
@@ -173,11 +216,11 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
       const proxyUrl = `/api/forms/proxy-pdf?url=${encodeURIComponent(data.gizmoFormUrl)}`;
       const response = await fetch(proxyUrl);
       if (!response.ok) throw new Error("Failed to fetch PDF template");
-      const bytes = await response.arrayBuffer();
-      setPdfBytes(bytes);
+      const originalBytes = await response.arrayBuffer();
+      setPdfBytes(originalBytes);
 
       const PDFLib = await import("pdf-lib");
-      const pdfDoc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+      const pdfDoc = await PDFLib.PDFDocument.load(originalBytes.slice(0), { ignoreEncryption: true });
       const pages = pdfDoc.getPages();
       setPageCount(pages.length);
 
@@ -206,14 +249,12 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
         setMode("acroform");
         setAcroFields(fieldValues);
         setLoading(false);
-        renderPage(bytes, 0);
+        renderAcroPreview(originalBytes, fieldValues, 0);
         return;
       }
 
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-
-      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
+      const pdfjsLib = await getPdfjsLib();
+      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(originalBytes.slice(0)) });
       const pdfDocument = await loadingTask.promise;
 
       const detectedFields: PlaceholderField[] = [];
@@ -223,13 +264,6 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
         const page = await pdfDocument.getPage(pageIdx + 1);
         const textContent = await page.getTextContent();
         const viewport = page.getViewport({ scale: 1.0 });
-
-        interface TextItem {
-          str: string;
-          transform: number[];
-          width: number;
-          height: number;
-        }
 
         const items: TextItem[] = textContent.items.filter(
           (item: any) => "str" in item && item.str
@@ -253,7 +287,7 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
           line.sort((a, b) => a.transform[4] - b.transform[4]);
           const fullText = line.map((i) => i.str).join("");
 
-          const placeholderRegex = /\{(\w+)\}/g;
+          const placeholderRegex = /\{([a-zA-Z]+)\}/g;
           let match;
           while ((match = placeholderRegex.exec(fullText)) !== null) {
             const token = match[0];
@@ -277,6 +311,13 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
             const x = anchorItem.transform[4] + (posInItem / Math.max(anchorItem.str.length, 1)) * anchorItem.width;
             const y = anchorItem.transform[5];
 
+            const nextFieldOnLine = detectedFields.find(
+              (f) => f.pageIndex === pageIdx && f.x > x && Math.abs(f.y - (viewport.height - y)) < 5
+            );
+            const fieldWidth = nextFieldOnLine
+              ? nextFieldOnLine.x - x - 5
+              : Math.min(viewport.width - x - 10, Math.max(token.length * 8, 100));
+
             let val = resolveValue(mapping, data);
             if (mapping.key === "dateOfBirth") val = formatDOB(val);
 
@@ -285,47 +326,51 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
               value: val,
               x,
               y: viewport.height - y,
-              width: Math.max(token.length * 7, 80),
+              width: fieldWidth,
               pageIndex: pageIdx,
               label: mapping.key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()),
             });
           }
 
-          const radioRegex = /\{radio_(\w+)_(\w+)\}/g;
+          // Pass 1 — Full radio token on one line
+          const radioRegex = /\{radio_(\w+?)_(\w+)\}/g;
           let radioMatch;
           while ((radioMatch = radioRegex.exec(fullText)) !== null) {
-            const groupName = radioMatch[1].toLowerCase();
-            const optionValue = radioMatch[2].toLowerCase();
+            addRadioFromLine(radioMatch[2], line, radioMatch.index, viewport, pageIdx, detectedRadios);
+          }
+        }
 
-            let charOff = 0;
-            let rAnchorItem: TextItem | null = null;
-            for (const item of line) {
-              if (charOff + item.str.length > radioMatch.index) {
-                rAnchorItem = item;
-                break;
-              }
-              charOff += item.str.length;
+        // Pass 2 — Combined in single text item
+        for (const item of items) {
+          const flexMatch = item.str.match(/\{?radio[_\s]*id[_\s]*(\d+)\}?/i);
+          if (flexMatch) {
+            const option = flexMatch[1];
+            const alreadyFound = detectedRadios.some(
+              (r) => r.option === option && r.pageIndex === pageIdx
+            );
+            if (!alreadyFound) {
+              addRadioItem(option, item, viewport, pageIdx, detectedRadios);
             }
+          }
+        }
 
-            if (!rAnchorItem) continue;
-
-            const autoFillRule = RADIO_AUTO_FILL[groupName];
-            let selected = false;
-            if (autoFillRule) {
-              const sourceVal = data.patientData[autoFillRule.sourceField] || "";
-              const mappedOption = autoFillRule.valueMap[sourceVal];
-              if (mappedOption === optionValue) selected = true;
+        // Pass 3 — Split across items
+        for (const item of items) {
+          if (!/\{?radio/i.test(item.str)) continue;
+          for (const nearby of items) {
+            if (nearby === item) continue;
+            const dx = Math.abs(nearby.transform[4] - item.transform[4]);
+            const dy = Math.abs(nearby.transform[5] - item.transform[5]);
+            if (dx > 60 || dy > 20) continue;
+            const numMatch = nearby.str.match(/[_\s]?id[_\s]?(\d+)/i);
+            if (!numMatch) continue;
+            const option = numMatch[1];
+            const alreadyFound = detectedRadios.some(
+              (r) => r.option === option && r.pageIndex === pageIdx
+            );
+            if (!alreadyFound) {
+              addRadioItem(option, item, viewport, pageIdx, detectedRadios);
             }
-
-            detectedRadios.push({
-              group: groupName,
-              option: optionValue,
-              x: rAnchorItem.transform[4],
-              y: viewport.height - rAnchorItem.transform[5],
-              pageIndex: pageIdx,
-              selected,
-              fontSize: rAnchorItem.height || 12,
-            });
           }
         }
       }
@@ -334,7 +379,7 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
       setPlaceholderFields(detectedFields);
       setRadioFields(detectedRadios);
       setLoading(false);
-      renderPage(bytes, 0);
+      renderPlaceholderPage(originalBytes, 0);
     } catch (err: any) {
       console.error("PDF load error:", err);
       setError(err.message || "Failed to load PDF template");
@@ -342,22 +387,97 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
     }
   }, [data]);
 
-  const renderPage = async (bytes: ArrayBuffer, pageIdx: number) => {
+  function addRadioFromLine(
+    option: string,
+    line: TextItem[],
+    matchIndex: number,
+    viewport: { height: number },
+    pageIdx: number,
+    detectedRadios: RadioField[]
+  ) {
+    let charOff = 0;
+    let anchorItem: TextItem | null = null;
+    for (const item of line) {
+      if (charOff + item.str.length > matchIndex) {
+        anchorItem = item;
+        break;
+      }
+      charOff += item.str.length;
+    }
+    if (!anchorItem) return;
+    addRadioItem(option, anchorItem, viewport, pageIdx, detectedRadios);
+  }
+
+  function addRadioItem(
+    option: string,
+    item: TextItem,
+    viewport: { height: number },
+    pageIdx: number,
+    detectedRadios: RadioField[]
+  ) {
+    const group = getRadioGroup(option);
+
+    const autoFillRule = RADIO_AUTO_FILL[group];
+    let selected = false;
+    if (autoFillRule) {
+      const sourceVal = data.patientData[autoFillRule.sourceField] || "";
+      const mappedOption = autoFillRule.valueMap[sourceVal];
+      if (mappedOption === option) selected = true;
+    }
+
+    detectedRadios.push({
+      group,
+      option,
+      x: item.transform[4],
+      y: viewport.height - item.transform[5],
+      pageIndex: pageIdx,
+      selected,
+      fontSize: item.height || 12,
+    });
+  }
+
+  const renderAcroPreview = async (bytes: ArrayBuffer, fieldVals: Record<string, string>, pageIdx: number) => {
     if (!canvasRef.current) return;
     try {
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      const PDFLib = await import("pdf-lib");
+      const previewDoc = await PDFLib.PDFDocument.load(bytes.slice(0), { ignoreEncryption: true });
+      const form = previewDoc.getForm();
 
-      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
+      for (const [fieldName, value] of Object.entries(fieldVals)) {
+        try {
+          const f = form.getTextField(fieldName);
+          f.setText(value);
+          f.updateAppearances();
+        } catch {}
+      }
+      form.flatten();
+
+      const flattenedBytes = await previewDoc.save();
+      await renderCanvasFromBytes(flattenedBytes, pageIdx);
+    } catch (err) {
+      console.error("AcroForm preview render error:", err);
+      await renderCanvasFromBytes(bytes.slice(0), pageIdx);
+    }
+  };
+
+  const renderPlaceholderPage = async (bytes: ArrayBuffer, pageIdx: number) => {
+    await renderCanvasFromBytes(bytes.slice(0), pageIdx);
+  };
+
+  const renderCanvasFromBytes = async (bytes: ArrayBuffer, pageIdx: number) => {
+    if (!canvasRef.current) return;
+    try {
+      const pdfjs = await getPdfjsLib();
+      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(bytes) });
       const pdfDocument = await loadingTask.promise;
       const page = await pdfDocument.getPage(pageIdx + 1);
 
       const containerWidth = containerRef.current?.clientWidth || 600;
       const viewport = page.getViewport({ scale: 1.0 });
-      const newScale = Math.min((containerWidth - 32) / viewport.width, 1.5);
-      setScale(newScale);
+      const baseScale = Math.min((containerWidth - 32) / viewport.width, 1.5);
+      const renderScale = baseScale * (zoomLevel / 100);
 
-      const scaledViewport = page.getViewport({ scale: newScale });
+      const scaledViewport = page.getViewport({ scale: renderScale });
       const canvas = canvasRef.current;
       canvas.width = scaledViewport.width;
       canvas.height = scaledViewport.height;
@@ -374,10 +494,21 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
   }, [loadPdf]);
 
   useEffect(() => {
-    if (pdfBytes && currentPage >= 0) {
-      renderPage(pdfBytes, currentPage);
+    if (!pdfBytes) return;
+    if (mode === "acroform") {
+      renderAcroPreview(pdfBytes, acroFields, currentPage);
+    } else {
+      renderPlaceholderPage(pdfBytes, currentPage);
     }
-  }, [currentPage, pdfBytes]);
+  }, [currentPage, zoomLevel]);
+
+  useEffect(() => {
+    if (!pdfBytes || mode !== "acroform") return;
+    const timer = setTimeout(() => {
+      renderAcroPreview(pdfBytes, acroFields, currentPage);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [acroFields]);
 
   const handleFieldChange = (index: number, value: string) => {
     const updated = [...placeholderFields];
@@ -400,67 +531,73 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
     );
   };
 
-  const downloadPdf = async () => {
-    if (!pdfBytes) return;
-    setDownloading(true);
+  const buildFilledPdf = async (): Promise<Uint8Array> => {
+    if (!pdfBytes) throw new Error("No PDF loaded");
+    const PDFLib = await import("pdf-lib");
+    const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes.slice(0), { ignoreEncryption: true });
 
-    try {
-      const PDFLib = await import("pdf-lib");
-      const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    if (mode === "acroform") {
+      const form = pdfDoc.getForm();
+      for (const [fieldName, value] of Object.entries(acroFields)) {
+        try {
+          const field = form.getTextField(fieldName);
+          field.setText(value);
+        } catch {}
+      }
+      form.flatten();
+    } else if (mode === "placeholder") {
+      const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+      const pages = pdfDoc.getPages();
 
-      if (mode === "acroform") {
-        const form = pdfDoc.getForm();
-        for (const [fieldName, value] of Object.entries(acroFields)) {
-          try {
-            const field = form.getTextField(fieldName);
-            field.setText(value);
-          } catch {}
-        }
-        form.flatten();
-      } else if (mode === "placeholder") {
-        const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-        const pages = pdfDoc.getPages();
+      for (const field of placeholderFields) {
+        if (field.pageIndex >= pages.length) continue;
+        const page = pages[field.pageIndex];
+        const pageHeight = page.getHeight();
 
-        const doctorLastName = (data.doctorData.lastName || "").toLowerCase();
-        const offsets = DOCTOR_FORM_OFFSETS[doctorLastName] || { x: 0, y: 0 };
-
-        for (const field of placeholderFields) {
-          if (field.pageIndex >= pages.length) continue;
-          const page = pages[field.pageIndex];
-          const pageHeight = page.getHeight();
-
-          page.drawText(field.value, {
-            x: field.x + offsets.x,
-            y: pageHeight - field.y + offsets.y,
-            size: 10,
-            font,
-            color: PDFLib.rgb(0, 0, 0),
-          });
-        }
-
-        for (const radio of radioFields) {
-          if (!radio.selected || radio.pageIndex >= pages.length) continue;
-          const page = pages[radio.pageIndex];
-          const pageHeight = page.getHeight();
-          const radius = Math.max(radio.fontSize * 0.3, 4);
-
-          page.drawCircle({
-            x: radio.x + radius + offsets.x,
-            y: pageHeight - radio.y + offsets.y,
-            size: radius,
-            color: PDFLib.rgb(0, 0, 0),
-          });
-        }
+        page.drawText(field.value, {
+          x: field.x,
+          y: pageHeight - field.y,
+          size: 10,
+          font,
+          color: PDFLib.rgb(0, 0, 0),
+        });
       }
 
-      const filledBytes = await pdfDoc.save();
+      for (const radio of radioFields) {
+        if (!radio.selected || radio.pageIndex >= pages.length) continue;
+        const page = pages[radio.pageIndex];
+        const pageHeight = page.getHeight();
+        const size = Math.max(radio.fontSize * 0.35, 5);
+
+        page.drawRectangle({
+          x: radio.x,
+          y: pageHeight - radio.y - size / 2,
+          width: size,
+          height: size,
+          color: PDFLib.rgb(0, 0, 0),
+        });
+      }
+    }
+
+    return await pdfDoc.save();
+  };
+
+  const getFileName = () => {
+    const firstName = (data.patientData.firstName || "Patient").replace(/[^a-zA-Z0-9]/g, "_");
+    const lastName = (data.patientData.lastName || "").replace(/[^a-zA-Z0-9]/g, "_");
+    const dateStr = new Date()
+      .toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" })
+      .replace(/\//g, "-");
+    return `${firstName}_${lastName}_Physician_Recommendation_${dateStr}.pdf`;
+  };
+
+  const downloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const filledBytes = await buildFilledPdf();
       const blob = new Blob([filledBytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
-
-      const firstName = (data.patientData.firstName || "Patient").replace(/[^a-zA-Z0-9]/g, "_");
-      const lastName = (data.patientData.lastName || "").replace(/[^a-zA-Z0-9]/g, "_");
-      const dateStr = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }).replace(/\//g, "-");
-      const fileName = `${firstName}_${lastName}_Physician_Recommendation_${dateStr}.pdf`;
+      const fileName = getFileName();
 
       const a = document.createElement("a");
       a.href = url;
@@ -476,6 +613,32 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
       toast({ title: "Download Failed", description: err.message, variant: "destructive" });
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const printPdf = async () => {
+    setPrinting(true);
+    try {
+      const filledBytes = await buildFilledPdf();
+      const blob = new Blob([filledBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+
+      const iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      iframe.onload = () => {
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          URL.revokeObjectURL(url);
+          setPrinting(false);
+        }, 1000);
+      };
+    } catch (err: any) {
+      console.error("Print error:", err);
+      toast({ title: "Print Failed", description: err.message, variant: "destructive" });
+      setPrinting(false);
     }
   };
 
@@ -524,33 +687,62 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
     );
   }
 
+  const containerWidth = containerRef.current?.clientWidth || 600;
+  const baseScale = Math.min((containerWidth - 32) / 612, 1.5);
+  const renderScale = baseScale * (zoomLevel / 100);
+
   const pageFields = placeholderFields.filter((f) => f.pageIndex === currentPage);
-  const pageRadios = radioFields.filter((r) => r.pageIndex === currentPage);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3 p-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
+          {onClose && (
+            <Button variant="ghost" size="sm" onClick={onClose} data-testid="button-back">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back
+            </Button>
+          )}
           <Badge variant="secondary" data-testid="badge-fill-mode">
             {mode === "acroform" ? "AcroForm Mode" : "Placeholder Mode"}
           </Badge>
           <Badge variant="outline">
             {mode === "acroform"
-              ? `${Object.keys(acroFields).length} fields`
+              ? `${Object.values(acroFields).filter(Boolean).length}/${Object.keys(acroFields).length} filled`
               : `${placeholderFields.length} fields, ${radioFields.length} radios`}
           </Badge>
         </div>
-        <div className="flex gap-2">
-          {onClose && (
-            <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
-          )}
-          <Button onClick={downloadPdf} disabled={downloading} data-testid="button-download-pdf">
-            {downloading ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Download Filled PDF
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 border rounded-md px-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setZoomLevel((z) => Math.max(z - 25, 50))}
+              disabled={zoomLevel <= 50}
+              data-testid="button-zoom-out"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-xs w-10 text-center">{zoomLevel}%</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setZoomLevel((z) => Math.min(z + 25, 200))}
+              disabled={zoomLevel >= 200}
+              data-testid="button-zoom-in"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" onClick={printPdf} disabled={printing} data-testid="button-print-pdf">
+            {printing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Printer className="h-4 w-4 mr-1" />}
+            Print
+          </Button>
+          <Button size="sm" onClick={downloadPdf} disabled={downloading} data-testid="button-download-pdf">
+            {downloading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Download className="h-4 w-4 mr-1" />}
+            Download PDF
           </Button>
         </div>
       </div>
@@ -561,7 +753,7 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
             <CardContent className="p-2 overflow-auto relative">
               <canvas ref={canvasRef} className="mx-auto block" data-testid="pdf-canvas" />
               {mode === "placeholder" &&
-                pageFields.map((field, idx) => {
+                pageFields.map((field) => {
                   const globalIdx = placeholderFields.indexOf(field);
                   return (
                     <input
@@ -571,9 +763,9 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
                       onChange={(e) => handleFieldChange(globalIdx, e.target.value)}
                       className="absolute bg-yellow-100/70 dark:bg-yellow-900/40 border border-yellow-400 text-xs px-1 rounded"
                       style={{
-                        left: field.x * scale + 8,
-                        top: field.y * scale,
-                        width: Math.max(field.width * scale, 60),
+                        left: field.x * renderScale + 8,
+                        top: field.y * renderScale,
+                        width: Math.max(field.width * renderScale, 60),
                         height: 18,
                       }}
                       title={field.label}
@@ -635,7 +827,7 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
                         value={value}
                         onChange={(e) => handleAcroFieldChange(fieldName, e.target.value)}
                         className="h-8 text-sm"
-                        data-testid={`input-acro-${normalizeFieldName(fieldName)}`}
+                        data-testid={`input-acro-${normalized}`}
                       />
                     </div>
                   );
@@ -668,7 +860,7 @@ export default function GizmoForm({ data, onClose }: GizmoFormProps) {
                         return (
                           <div key={group} className="space-y-1">
                             <Label className="text-xs text-muted-foreground capitalize">{group}</Label>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-1">
                               {groupRadios.map((radio) => (
                                 <Button
                                   key={`${radio.group}-${radio.option}`}
