@@ -255,6 +255,16 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
         }
       }
 
+      interface PendingField {
+        token: string;
+        mapping: { source: "patient" | "doctor" | "meta"; key: string };
+        x: number;
+        y: number;
+        pageIndex: number;
+      }
+
+      const pendingFields: PendingField[] = [];
+
       for (const line of lines) {
         line.sort((a, b) => a.transform[4] - b.transform[4]);
         const fullText = line.map((i) => i.str).join("");
@@ -284,32 +294,12 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
               const x = anchorItem.transform[4] + (anchorOffset * (anchorItem.width / Math.max(anchorItem.str.length, 1)));
               const y = anchorItem.transform[5];
 
-              let labelItem: TextItem | null = null;
-              for (let li = line.indexOf(anchorItem) - 1; li >= 0; li--) {
-                const candidate = line[li];
-                if (anchorItem.transform[4] - (candidate.transform[4] + candidate.width) < 15) {
-                  labelItem = candidate;
-                  break;
-                }
-              }
-
-              const anchorX = labelItem ? labelItem.transform[4] : x;
-              const nextFieldOnLine = fields.filter(
-                (f) => f.pageIndex === pageNum - 1 && Math.abs(f.y - y) < 3 && f.x > anchorX
-              );
-              const nextX = nextFieldOnLine.length > 0 ? Math.min(...nextFieldOnLine.map((f) => f.x)) : null;
-              const fieldWidth = nextX ? nextX - anchorX - 8 : viewport.width - anchorX - 20;
-
-              fields.push({
+              pendingFields.push({
                 token,
-                key: mapping.key,
-                source: mapping.source,
-                dataKey: mapping.key,
-                x: anchorX + offsets.x,
-                y: viewport.height - y + offsets.y,
-                width: Math.max(fieldWidth, 60),
+                mapping,
+                x,
+                y,
                 pageIndex: pageNum - 1,
-                value: resolveValue(mapping.source, mapping.key, data),
               });
             }
           }
@@ -432,6 +422,26 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
           const anchorY = Math.max(item.transform[5], other.transform[5]);
           addRadioFromItem(option, anchorX, anchorY, other.height || item.height);
         }
+      }
+
+      for (const pf of pendingFields) {
+        const sameLine = pendingFields.filter(
+          (other) => other.pageIndex === pf.pageIndex && Math.abs(other.y - pf.y) < 3 && other.x > pf.x
+        );
+        const nextX = sameLine.length > 0 ? Math.min(...sameLine.map((f) => f.x)) : null;
+        const fieldWidth = nextX ? nextX - pf.x - 5 : viewport.width - pf.x - 20;
+
+        fields.push({
+          token: pf.token,
+          key: pf.mapping.key,
+          source: pf.mapping.source,
+          dataKey: pf.mapping.key,
+          x: pf.x + offsets.x,
+          y: viewport.height - pf.y + offsets.y,
+          width: Math.max(fieldWidth, 40),
+          pageIndex: pf.pageIndex,
+          value: resolveValue(pf.mapping.source, pf.mapping.key, data),
+        });
       }
     }
 
