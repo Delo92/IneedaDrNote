@@ -252,7 +252,7 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !doctorProfile?.id) return;
+    if (!file || !selectedUser) return;
 
     if (file.type !== "application/pdf") {
       toast({ title: "Invalid file", description: "Only PDF files are allowed", variant: "destructive" });
@@ -261,13 +261,27 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
 
     try {
       setUploadingPdf(true);
+
+      let profileId = doctorProfile?.id;
+
+      if (!profileId) {
+        const createRes = await apiRequest("POST", `/api/doctor-profiles`, {
+          ...doctorProfileData,
+          userId: selectedUser.id,
+        });
+        const created = await createRes.json();
+        profileId = created.id;
+        queryClient.invalidateQueries({ queryKey: ["/api/doctor-profiles"] });
+      }
+
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch(`/api/admin/doctor-templates/${doctorProfile.id}/gizmo-form`, {
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      const response = await fetch(`/api/admin/doctor-templates/${profileId}/gizmo-form`, {
         method: "POST",
         headers: {
-          ...(auth.currentUser ? { Authorization: `Bearer ${await auth.currentUser.getIdToken()}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: formData,
       });
@@ -801,18 +815,17 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
                       <div className="p-4 border-2 border-dashed rounded-lg text-center space-y-3">
                         <FileText className="h-10 w-10 mx-auto text-muted-foreground opacity-50" />
                         <p className="text-sm text-muted-foreground">No PDF template uploaded yet</p>
-                        {!doctorProfile ? (
-                          <p className="text-xs text-amber-600 dark:text-amber-400">Save the doctor profile first, then upload a PDF.</p>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            onClick={() => pdfInputRef.current?.click()}
-                            disabled={uploadingPdf}
-                            data-testid="button-upload-pdf"
-                          >
-                            {uploadingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
-                            Upload PDF Template
-                          </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => pdfInputRef.current?.click()}
+                          disabled={uploadingPdf}
+                          data-testid="button-upload-pdf"
+                        >
+                          {uploadingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                          Upload PDF Template
+                        </Button>
+                        {!doctorProfile && (
+                          <p className="text-xs text-muted-foreground">The doctor profile will be created automatically when you upload.</p>
                         )}
                       </div>
                     )}
