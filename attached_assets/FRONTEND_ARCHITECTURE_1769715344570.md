@@ -30,7 +30,7 @@ A comprehensive guide to understanding and developing the ChronicDocs telemedici
 
 ## Overview
 
-ChronicDocs is a telemedicine platform for medical cannabis recommendations. The frontend is a React single-page application (SPA) that manages the entire workflow from patient registration through document delivery.
+ChronicDocs is a telemedicine platform for doctor's note services. The frontend is a React single-page application (SPA) that manages the entire workflow from patient registration through document delivery.
 
 **Core Workflow:**
 ```
