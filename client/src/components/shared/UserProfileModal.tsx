@@ -166,7 +166,6 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
         gizmoFormUrl: doctorProfile.gizmoFormUrl || "",
         stateForms: doctorProfile.stateForms || {},
         isActive: doctorProfile.isActive !== false,
-        excludeFromRotation: doctorProfile.excludeFromRotation === true,
       });
     } else if (selectedUser && isUserDoctor && !doctorProfileLoading) {
       setDoctorProfileData({
@@ -182,7 +181,6 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
         gizmoFormUrl: "",
         stateForms: {},
         isActive: true,
-        excludeFromRotation: false,
       });
     }
   }, [doctorProfile, selectedUser, isUserDoctor, doctorProfileLoading]);
@@ -683,37 +681,11 @@ export function UserProfileModal({ user: selectedUser, onClose, canEditLevel = t
                         <Stethoscope className="h-5 w-5" /> Doctor Credentials
                       </h3>
                       {doctorProfile && (
-                        <div className="flex items-center gap-2">
-                          <Badge variant={doctorProfileData.isActive !== false ? "default" : "destructive"}>
-                            {doctorProfileData.isActive !== false ? "Active" : "Inactive"}
-                          </Badge>
-                          {doctorProfileData.excludeFromRotation && (
-                            <Badge variant="outline" className="text-amber-600 border-amber-400">
-                              Excluded from Rotation
-                            </Badge>
-                          )}
-                        </div>
+                        <Badge variant={doctorProfileData.isActive !== false ? "default" : "destructive"}>
+                          {doctorProfileData.isActive !== false ? "Active" : "Inactive"}
+                        </Badge>
                       )}
                     </div>
-
-                    {doctorProfile && (
-                      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md" data-testid="toggle-exclude-rotation">
-                        <div>
-                          <p className="text-sm font-medium">Exclude from Assignment Rotation</p>
-                          <p className="text-xs text-muted-foreground">When enabled, this doctor will not receive new applications automatically</p>
-                        </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={doctorProfileData.excludeFromRotation}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${doctorProfileData.excludeFromRotation ? "bg-amber-500" : "bg-gray-300 dark:bg-gray-600"}`}
-                          onClick={() => setDoctorProfileData({ ...doctorProfileData, excludeFromRotation: !doctorProfileData.excludeFromRotation })}
-                          data-testid="button-toggle-exclude-rotation"
-                        >
-                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${doctorProfileData.excludeFromRotation ? "translate-x-6" : "translate-x-1"}`} />
-                        </button>
-                      </div>
-                    )}
 
                     {!doctorProfile && (
                       <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md text-sm">
