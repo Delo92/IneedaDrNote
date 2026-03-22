@@ -394,7 +394,12 @@ export async function registerRoutes(
       res.json({ success: true, data });
     } catch (error: any) {
       console.error('GA4 analytics error:', error.message);
-      res.status(500).json({ success: false, message: error.message || 'Failed to fetch analytics data' });
+      const isConfigError = error.message?.includes('GA4_PROPERTY_ID') || error.message?.includes('not set');
+      if (isConfigError) {
+        res.json({ success: false, message: error.message });
+      } else {
+        res.status(500).json({ success: false, message: error.message || 'Failed to fetch analytics data' });
+      }
     }
   });
 
