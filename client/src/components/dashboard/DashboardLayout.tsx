@@ -33,6 +33,7 @@ import {
   DollarSign,
   Bell,
   HelpCircle,
+  AlertTriangle,
 } from "lucide-react";
 
 interface NavItem {
@@ -97,6 +98,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           { title: "Payments", href: "/dashboard/owner/payments", icon: CreditCard },
           { title: "Commissions", href: "/dashboard/owner/commissions", icon: DollarSign },
           { title: "Analytics", href: "/dashboard/owner/analytics", icon: BarChart3 },
+          { title: "Diagnostics", href: "/dashboard/owner/diagnostics", icon: AlertTriangle },
           { title: "Site Settings", href: "/dashboard/owner/site-settings", icon: Building2 },
           { title: "My Settings", href: "/dashboard/owner/settings", icon: Settings },
         ];

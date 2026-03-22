@@ -28,6 +28,7 @@ const UsersManagement = lazy(() => import("@/pages/dashboard/admin/UsersManageme
 const PackagesManagement = lazy(() => import("@/pages/dashboard/admin/PackagesManagement"));
 const OwnerDashboard = lazy(() => import("@/pages/dashboard/OwnerDashboard"));
 const SiteSettings = lazy(() => import("@/pages/dashboard/owner/SiteSettings"));
+const Diagnostics = lazy(() => import("@/pages/dashboard/owner/Diagnostics"));
 
 // Applicant sub-pages
 const RegistrationPage = lazy(() => import("@/pages/dashboard/applicant/RegistrationPage"));
@@ -270,6 +271,11 @@ function App() {
                   <Route path="/dashboard/owner/analytics">
                     <ProtectedRoute minLevel={4}>
                       <SharedAnalyticsPage />
+                    </ProtectedRoute>
+                  </Route>
+                  <Route path="/dashboard/owner/diagnostics">
+                    <ProtectedRoute minLevel={4}>
+                      <Diagnostics />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/owner">

@@ -44,6 +44,7 @@ Role names are configurable.
 -   **White-Label Customization**: Owners can configure branding, role names, contact info, and more.
 -   **Payment Processing**: Integrated Authorize.Net for credit card payments, with client-side tokenization.
 -   **PDF Auto-Fill System (Gizmo)**: Renders and auto-fills PDF forms based on patient data, supporting both AcroForm fields and placeholder tokens. Doctors can upload state-specific PDF templates.
+-   **Diagnostics System**: Owner-only `/dashboard/owner/diagnostics` page with two tabs — Analytics (GA4 Data API) and Error Logs (Firestore `errorLogs` collection). Global API intercept middleware auto-logs all 4xx/5xx responses. Global crash handler logs unhandled server errors. `logClientError()` in `client/src/lib/clientErrorLogger.ts` for manual frontend error reporting. Requires `GA4_PROPERTY_ID` secret for analytics tab.
 -   **Role-Based Dashboards**: Unique dashboards for each user level with tailored functionalities.
 -   **Comprehensive User and Application Management**: Admins can manage users, applications, and settings.
 -   **Draft Saving**: Patients can save application progress.

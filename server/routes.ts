@@ -11,6 +11,8 @@ import { firebaseStorage, firebaseAuth, getAdminAuth } from "./firebase-admin";
 import { sendDoctorApprovalEmail, sendAdminNotificationEmail, sendPatientApprovalEmail, sendDoctorCompletionCopyEmail } from "./email";
 import { chargeCard, isAuthorizeNetConfigured, getAcceptJsUrl, getApiLoginId } from "./authorizenet";
 import { trackPromoRedemption } from "./chronicbrands";
+import { logError, getErrorLogs, createErrorContext, type ErrorType, type ErrorSeverity } from "./services/errorLogger";
+import { getGA4Report } from "./services/ga4Analytics";
 
 function getContactEmail(user: Record<string, any>): string {
   return user.contactEmail || user.email;
@@ -256,6 +258,146 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // ===========================================================================
+  // GLOBAL ERROR INTERCEPT MIDDLEWARE
+  // Wraps res.json to auto-log all 4xx/5xx API responses to Firestore
+  // ===========================================================================
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const originalJson = (res.json as Function).bind(res);
+    (res as any).json = function (data: any) {
+      const status = res.statusCode;
+      if (status >= 400 && req.path.startsWith('/api')) {
+        const isSessionCheck = (
+          req.path === '/api/admin/session' ||
+          req.path === '/api/portal/session'
+        ) && status === 401;
+        const isCartMiss = req.path.startsWith('/api/cart') && status === 404;
+
+        if (!isSessionCheck && !isCartMiss) {
+          const p = req.path.toLowerCase();
+          let errorType: ErrorType = 'api';
+          if (p.includes('/login') || p.includes('/logout') || p.includes('/session') || p.includes('/auth') || p.includes('/register')) errorType = 'authentication';
+          else if (p.includes('/payment') || p.includes('/charge') || p.includes('/subscribe')) errorType = 'payment';
+          else if (p.includes('/email') || p.includes('/contact') || p.includes('/send')) errorType = 'email';
+          else if (p.includes('/upload') || p.includes('/image') || p.includes('/file')) errorType = 'form_upload';
+          else if (p.includes('/pdf') || p.includes('/forms')) errorType = 'pdf';
+          else if (p.includes('/admin')) errorType = 'admin_operation_error';
+          else if (status >= 500) errorType = 'system';
+
+          const severity: ErrorSeverity =
+            status >= 500 ? 'error' :
+            (status === 401 || status === 403) ? 'warning' : 'info';
+
+          logError({
+            errorType,
+            severity,
+            message: data?.message || `HTTP ${status} ${req.method} ${req.path}`,
+            endpoint: req.path,
+            method: req.method,
+            statusCode: status,
+            wasShownToUser: status < 500,
+            context: createErrorContext({
+              ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+              userAgent: req.headers['user-agent']?.substring(0, 250),
+              referer: req.headers['referer'],
+              body: req.method !== 'GET' ? JSON.stringify(req.body || {}).substring(0, 400) : undefined,
+            }),
+          }).catch(() => {});
+        }
+      }
+      return originalJson(data);
+    };
+    next();
+  });
+
+  // ===========================================================================
+  // DIAGNOSTICS ROUTES
+  // ===========================================================================
+
+  app.post("/api/error/log-client-error", async (req: Request, res: Response) => {
+    try {
+      const {
+        errorType, severity, message,
+        userUid, userName, userEmail, userLevel,
+        endpoint, context, stackTrace, wasShownToUser
+      } = req.body;
+
+      if (!message) {
+        res.status(400).json({ success: false, error: 'Message is required' });
+        return;
+      }
+
+      let verifiedUid: string | undefined;
+      let verifiedEmail: string | undefined;
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        try {
+          const decoded = await getAdminAuth().verifyIdToken(authHeader.split(" ")[1]);
+          verifiedUid = decoded.uid;
+          verifiedEmail = decoded.email;
+        } catch {}
+      }
+
+      await logError({
+        errorType: errorType || 'client',
+        severity: severity || 'error',
+        message,
+        stackTrace,
+        userUid: verifiedUid || userUid || undefined,
+        userName: userName || undefined,
+        userEmail: verifiedEmail || userEmail || undefined,
+        userLevel: userLevel || undefined,
+        endpoint: endpoint || 'client-side',
+        method: 'CLIENT',
+        wasShownToUser: wasShownToUser ?? true,
+        context: {
+          ...context,
+          source: 'client_error',
+          identityVerified: !!verifiedUid,
+          userAgent: req.headers['user-agent'],
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      res.json({ success: true, message: 'Error logged successfully' });
+    } catch (error) {
+      console.error('Failed to log client error:', error);
+      res.json({ success: false, message: 'Failed to log error' });
+    }
+  });
+
+  app.get("/api/admin/error-logs", requireLevel(4), async (req: Request, res: Response) => {
+    try {
+      const { startDate, endDate, severity, errorType, userLevel, userUid, limit, offset } = req.query;
+      const options: any = {};
+      if (startDate) options.startDate = new Date(startDate as string);
+      if (endDate) options.endDate = new Date(endDate as string);
+      if (severity) options.severity = severity as string;
+      if (errorType) options.errorType = errorType as string;
+      if (userLevel !== undefined && userLevel !== '') options.userLevel = parseInt(userLevel as string);
+      if (userUid) options.userUid = userUid as string;
+      if (limit) options.limit = parseInt(limit as string);
+      if (offset) options.offset = parseInt(offset as string);
+      const result = await getErrorLogs(options);
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching error logs:', error);
+      res.status(500).json({ logs: [], total: 0 });
+    }
+  });
+
+  app.get("/api/admin/ga4-analytics", requireLevel(4), async (req: Request, res: Response) => {
+    try {
+      const dateRange = (req.query.dateRange as string) || '30d';
+      const data = await getGA4Report(dateRange);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error('GA4 analytics error:', error.message);
+      res.status(500).json({ success: false, message: error.message || 'Failed to fetch analytics data' });
+    }
+  });
+
   // ===========================================================================
   // FILE UPLOAD ROUTES (Firebase Storage)
   // ===========================================================================

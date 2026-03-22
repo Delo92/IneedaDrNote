@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { logError } from "./services/errorLogger";
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,11 +63,26 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+
+    logError({
+      errorType: status >= 500 ? 'system' : 'api',
+      severity: status >= 500 ? 'critical' : 'error',
+      message: `Unhandled server error: ${message}`,
+      stackTrace: err.stack,
+      endpoint: req.path,
+      method: req.method,
+      statusCode: status,
+      wasShownToUser: false,
+      context: {
+        ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+        userAgent: req.headers['user-agent']?.substring(0, 250),
+      },
+    }).catch(() => {});
 
     if (res.headersSent) {
       return next(err);
