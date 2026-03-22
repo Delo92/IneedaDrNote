@@ -273,8 +273,9 @@ export async function registerRoutes(
           req.path === '/api/portal/session'
         ) && status === 401;
         const isCartMiss = req.path.startsWith('/api/cart') && status === 404;
+        const isGA4Route = req.path === '/api/admin/ga4-analytics';
 
-        if (!isSessionCheck && !isCartMiss) {
+        if (!isSessionCheck && !isCartMiss && !isGA4Route) {
           const p = req.path.toLowerCase();
           let errorType: ErrorType = 'api';
           if (p.includes('/login') || p.includes('/logout') || p.includes('/session') || p.includes('/auth') || p.includes('/register')) errorType = 'authentication';
