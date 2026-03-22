@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { Switch, Route, Redirect } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
+import { Switch, Route, Redirect, useParams, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -47,6 +47,18 @@ const SharedReferralsPage = lazy(() => import("@/pages/dashboard/shared/Referral
 // Generic placeholder for pages not yet implemented
 const PlaceholderPage = lazy(() => import("@/pages/dashboard/placeholders/PlaceholderPage"));
 const DoctorReviewPortal = lazy(() => import("@/pages/DoctorReviewPortal"));
+
+function PromoRedirect() {
+  const params = useParams<{ code: string }>();
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    if (params.code) {
+      localStorage.setItem("pendingPromoCode", params.code.toUpperCase());
+    }
+    setLocation("/");
+  }, []);
+  return null;
+}
 
 function PageLoader() {
   return (
@@ -264,6 +276,11 @@ function App() {
                     <ProtectedRoute minLevel={4}>
                       <OwnerDashboard />
                     </ProtectedRoute>
+                  </Route>
+
+                  {/* Promo code URL capture: /:code → stores code → redirects to home */}
+                  <Route path="/:code">
+                    <PromoRedirect />
                   </Route>
 
                   {/* Fallback */}

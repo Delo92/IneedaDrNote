@@ -63,6 +63,7 @@ export default function NewApplication() {
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [acceptJsReady, setAcceptJsReady] = useState(false);
+  const [promoCode, setPromoCode] = useState(() => localStorage.getItem("pendingPromoCode") || "");
 
   const { data: profile, isLoading: profileLoading } = useQuery<any>({
     queryKey: ["/api/profile"],
@@ -233,6 +234,7 @@ export default function NewApplication() {
         opaqueDataValue: opaqueData.dataValue,
         packageId: selectedPackageId,
         formData,
+        promoCode: promoCode.trim() || undefined,
       });
       const result = await res.json();
 
@@ -240,6 +242,7 @@ export default function NewApplication() {
         throw new Error(result.message || "Payment failed");
       }
 
+      localStorage.removeItem("pendingPromoCode");
       queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
       apiRequest("PUT", "/api/profile/draft-form", { draftFormData: {} }).catch(() => {});
       queryClient.invalidateQueries({ queryKey: ["/api/profile/draft-form"] });
@@ -624,6 +627,25 @@ export default function NewApplication() {
                     })}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card data-testid="card-promo-code">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <Label htmlFor="promoCode">Promo / Referral Code <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input
+                    id="promoCode"
+                    placeholder="Enter code"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                    data-testid="input-promo-code"
+                    className="uppercase"
+                  />
+                  {promoCode && (
+                    <p className="text-xs text-green-600 dark:text-green-400">Code <strong>{promoCode}</strong> will be applied to your order.</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
 

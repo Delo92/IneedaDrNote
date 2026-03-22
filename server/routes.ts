@@ -10,6 +10,7 @@ import fs from "fs";
 import { firebaseStorage, firebaseAuth, getAdminAuth } from "./firebase-admin";
 import { sendDoctorApprovalEmail, sendAdminNotificationEmail, sendPatientApprovalEmail, sendDoctorCompletionCopyEmail } from "./email";
 import { chargeCard, isAuthorizeNetConfigured, getAcceptJsUrl, getApiLoginId } from "./authorizenet";
+import { trackPromoRedemption } from "./chronicbrands";
 
 function getContactEmail(user: Record<string, any>): string {
   return user.contactEmail || user.email;
@@ -823,7 +824,7 @@ export async function registerRoutes(
 
   app.post("/api/payment/charge", requireAuth, async (req, res) => {
     try {
-      const { opaqueDataDescriptor, opaqueDataValue, packageId, formData } = req.body;
+      const { opaqueDataDescriptor, opaqueDataValue, packageId, formData, promoCode } = req.body;
 
       if (!opaqueDataDescriptor || !opaqueDataValue) {
         res.status(400).json({ message: "Payment token is required" });
@@ -983,6 +984,19 @@ export async function registerRoutes(
       });
 
       await storage.updateUser(patient.id, { draftFormData: {} } as any);
+
+      if (promoCode && typeof promoCode === "string" && promoCode.trim()) {
+        trackPromoRedemption({
+          code: promoCode.trim().toUpperCase(),
+          orderNumber: chargeResult.transactionId || application.id,
+          orderValue: Number(pkg.price),
+          discountAmount: 0,
+          customerName: patientName,
+          customerEmail: getContactEmail(patient),
+          customerPhone: (patient as any).phone || undefined,
+          notes: `Package: ${pkg.name} | Application: ${application.id}`,
+        }).catch(err => console.error("Promo tracking error:", err));
+      }
 
       res.json({
         success: true,
