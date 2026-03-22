@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
+import { useGATracking } from "@/hooks/use-ga-tracking";
 import { Switch, Route, Redirect, useParams, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -49,6 +50,11 @@ const SharedReferralsPage = lazy(() => import("@/pages/dashboard/shared/Referral
 const PlaceholderPage = lazy(() => import("@/pages/dashboard/placeholders/PlaceholderPage"));
 const DoctorReviewPortal = lazy(() => import("@/pages/DoctorReviewPortal"));
 
+function GATracker() {
+  useGATracking();
+  return null;
+}
+
 function PromoRedirect() {
   const params = useParams<{ code: string }>();
   const [, setLocation] = useLocation();
@@ -80,6 +86,7 @@ function App() {
           <ConfigProvider>
             <TooltipProvider>
               <Toaster />
+              <GATracker />
               <Suspense fallback={<PageLoader />}>
                 <Switch>
                   {/* Public routes with AppShell */}
