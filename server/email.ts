@@ -346,3 +346,60 @@ export async function sendPatientApprovalEmail(data: PatientDocumentEmailData): 
     return false;
   }
 }
+
+interface NewRegistrationEmailData {
+  adminEmail: string;
+  userName: string;
+  userEmail: string;
+  userPhone: string;
+  userState: string;
+  dashboardUrl: string;
+}
+
+export async function sendNewRegistrationEmail(data: NewRegistrationEmailData): Promise<boolean> {
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+      <div style="background:#1a365d;color:white;padding:24px 32px;text-align:center;">
+        <h1 style="margin:0;font-size:22px;">I Need A Dr Note</h1>
+        <p style="margin:5px 0 0;font-size:14px;opacity:0.85;">New Registration</p>
+      </div>
+      <div style="padding:32px;">
+        <h2 style="color:#1a365d;margin:0 0 16px;">New User Registered</h2>
+        <p style="color:#374151;font-size:15px;line-height:1.6;">A new user has created an account on the platform.</p>
+        <div style="background:#f9fafb;border-radius:8px;padding:20px;margin:20px 0;border:1px solid #e5e7eb;">
+          <p style="margin:6px 0;color:#374151;"><strong>Name:</strong> ${data.userName}</p>
+          <p style="margin:6px 0;color:#374151;"><strong>Email:</strong> ${data.userEmail}</p>
+          <p style="margin:6px 0;color:#374151;"><strong>Phone:</strong> ${data.userPhone || "Not provided"}</p>
+          <p style="margin:6px 0;color:#374151;"><strong>State:</strong> ${data.userState || "Not provided"}</p>
+        </div>
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${data.dashboardUrl}" style="display:inline-block;background:#2563eb;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-size:16px;font-weight:bold;">
+            View in Dashboard
+          </a>
+        </div>
+      </div>
+      <div style="background:#f3f4f6;padding:16px 32px;text-align:center;">
+        <p style="color:#9ca3af;font-size:12px;margin:0;">I Need A Dr Note &bull; Admin Notification</p>
+      </div>
+    </div>
+  `;
+
+  if (!SENDGRID_API_KEY) {
+    console.log(`[email] Would send new registration notification to ${data.adminEmail} for user ${data.userEmail}`);
+    return true;
+  }
+
+  try {
+    await sgMail.send({
+      to: data.adminEmail,
+      from: { email: FROM_EMAIL, name: "I Need A Dr Note" },
+      subject: `[Admin] New Registration: ${data.userName}`,
+      html,
+    });
+    console.log(`New registration email sent to ${data.adminEmail}`);
+    return true;
+  } catch (error: any) {
+    console.error("Failed to send new registration email:", error?.response?.body || error.message);
+    return false;
+  }
+}

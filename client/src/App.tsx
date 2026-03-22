@@ -23,6 +23,7 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 // Dashboard pages
 const ApplicantDashboard = lazy(() => import("@/pages/dashboard/ApplicantDashboard"));
 const NewApplication = lazy(() => import("@/pages/dashboard/applicant/NewApplication"));
+const FormViewerPage = lazy(() => import("@/pages/dashboard/applicant/FormViewerPage"));
 const DoctorDashboard = lazy(() => import("@/pages/dashboard/DoctorDashboard"));
 const AdminDashboard = lazy(() => import("@/pages/dashboard/AdminDashboard"));
 const UsersManagement = lazy(() => import("@/pages/dashboard/admin/UsersManagement"));
@@ -113,6 +114,11 @@ function App() {
                   <Route path="/dashboard/applicant/applications/new">
                     <ProtectedRoute minLevel={1}>
                       <NewApplication />
+                    </ProtectedRoute>
+                  </Route>
+                  <Route path="/dashboard/applicant/applications/:applicationId/form">
+                    <ProtectedRoute minLevel={1}>
+                      <FormViewerPage />
                     </ProtectedRoute>
                   </Route>
                   <Route path="/dashboard/applicant/registration">

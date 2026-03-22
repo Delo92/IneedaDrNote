@@ -8,7 +8,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { firebaseStorage, firebaseAuth, getAdminAuth } from "./firebase-admin";
-import { sendDoctorApprovalEmail, sendAdminNotificationEmail, sendPatientApprovalEmail, sendDoctorCompletionCopyEmail } from "./email";
+import { sendDoctorApprovalEmail, sendAdminNotificationEmail, sendPatientApprovalEmail, sendDoctorCompletionCopyEmail, sendNewRegistrationEmail } from "./email";
 import { chargeCard, isAuthorizeNetConfigured, getAcceptJsUrl, getApiLoginId } from "./authorizenet";
 import { trackPromoRedemption } from "./chronicbrands";
 import { logError, getErrorLogs, createErrorContext, type ErrorType, type ErrorSeverity } from "./services/errorLogger";
@@ -588,6 +588,21 @@ export async function registerRoutes(
         entityId: user.id,
         details: { referredBy: referralCode || null },
       });
+
+      const adminSettings = await storage.getAdminSettings();
+      const notificationEmail = adminSettings?.notificationEmail;
+      if (notificationEmail) {
+        const protocol = "https";
+        const host = req.get("host") || "localhost:5000";
+        sendNewRegistrationEmail({
+          adminEmail: notificationEmail,
+          userName: `${firstName} ${lastName}`,
+          userEmail: email,
+          userPhone: phone || "",
+          userState: state || "",
+          dashboardUrl: `${protocol}://${host}/dashboard/admin/users`,
+        }).catch(err => console.error("Registration admin notification error:", err));
+      }
 
       res.json({
         user: {
@@ -2788,6 +2803,61 @@ export async function registerRoutes(
   // ===========================================================================
   // GIZMO FORM SYSTEM — PDF auto-fill
   // ===========================================================================
+
+  app.post("/api/forms/fill-letter", requireAuth, async (req, res) => {
+    try {
+      const { pdfUrl, patientData, doctorData, generatedDate } = req.body;
+      if (!pdfUrl) { res.status(400).json({ error: "pdfUrl required" }); return; }
+      const pdfResponse = await fetch(pdfUrl);
+      if (!pdfResponse.ok) { res.status(502).json({ error: "Failed to fetch letter PDF" }); return; }
+      const originalBytes = new Uint8Array(await pdfResponse.arrayBuffer());
+      const { PDFDocument } = await import("pdf-lib");
+      const placeholderMap: Record<string, string> = {
+        "{firstName}": patientData?.firstName || "",
+        "{middleName}": patientData?.middleName || "",
+        "{lastName}": patientData?.lastName || "",
+        "{suffix}": patientData?.suffix || "",
+        "{dateOfBirth}": patientData?.dateOfBirth || "",
+        "{address}": patientData?.address || "",
+        "{apt}": patientData?.apt || "",
+        "{city}": patientData?.city || "",
+        "{state}": patientData?.state || "",
+        "{zipCode}": patientData?.zipCode || "",
+        "{zip}": patientData?.zipCode || "",
+        "{phone}": patientData?.phone || "",
+        "{email}": patientData?.email || "",
+        "{medicalCondition}": patientData?.medicalCondition || "",
+        "{idNumber}": patientData?.idNumber || "",
+        "{driverLicenseNumber}": patientData?.driverLicenseNumber || "",
+        "{dlNumber}": patientData?.driverLicenseNumber || "",
+        "{idExpirationDate}": patientData?.idExpirationDate || "",
+        "{date}": generatedDate || new Date().toLocaleDateString(),
+        "{doctorFirstName}": doctorData?.firstName || "",
+        "{doctorMiddleName}": doctorData?.middleName || "",
+        "{doctorLastName}": doctorData?.lastName || "",
+        "{doctorPhone}": doctorData?.phone || "",
+        "{doctorAddress}": doctorData?.address || "",
+        "{doctorCity}": doctorData?.city || "",
+        "{doctorState}": doctorData?.state || "",
+        "{doctorZipCode}": doctorData?.zipCode || "",
+        "{doctorLicenseNumber}": doctorData?.licenseNumber || "",
+        "{doctorNpiNumber}": doctorData?.npiNumber || "",
+      };
+      let rawStr = Buffer.from(originalBytes).toString("binary");
+      for (const [placeholder, value] of Object.entries(placeholderMap)) {
+        while (rawStr.includes(placeholder)) rawStr = rawStr.replace(placeholder, value);
+      }
+      const modifiedBytes = Buffer.from(rawStr, "binary");
+      const pdfDoc = await PDFDocument.load(modifiedBytes, { updateMetadata: false });
+      const fixedBytes = await pdfDoc.save();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Cache-Control", "no-store");
+      res.send(Buffer.from(fixedBytes));
+    } catch (error: any) {
+      console.error("Fill letter error:", error);
+      res.status(500).json({ error: error.message || "Failed to fill letter" });
+    }
+  });
 
   app.get("/api/forms/proxy-pdf", async (req, res) => {
     try {

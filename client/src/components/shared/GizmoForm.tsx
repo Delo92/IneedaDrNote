@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Download, Printer, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { auth } from "@/lib/firebase";
 
 import * as pdfjsLib from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -496,6 +497,24 @@ export function GizmoForm({ data, onClose }: GizmoFormProps) {
       if (hasPlaceholders) {
         setMode("placeholder");
         await extractPlaceholdersFromPdf(pdf);
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          const fillResponse = await fetch("/api/forms/fill-letter", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            credentials: "include",
+            body: JSON.stringify({ pdfUrl: data.gizmoFormUrl, patientData: data.patientData || {}, doctorData: data.doctorData || {}, generatedDate: data.generatedDate || new Date().toLocaleDateString() }),
+          });
+          if (fillResponse.ok) {
+            const filledBytes = await fillResponse.arrayBuffer();
+            setPdfBytes(filledBytes);
+            const filledPdf = await pdfjsLib.getDocument({ data: new Uint8Array(filledBytes.slice(0)) }).promise;
+            setPdfDoc(filledPdf);
+            setTotalPages(filledPdf.numPages);
+            setLoading(false);
+            return;
+          }
+        } catch (err) { console.error("Server-side fill failed, falling back:", err); }
         setLoading(false);
         return;
       }

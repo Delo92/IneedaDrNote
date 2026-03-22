@@ -111,7 +111,16 @@ export function Footer() {
             {config.footerText || `\u00A9 ${currentYear} ${config.siteName}. All rights reserved.`}
           </p>
           <p className="text-xs text-muted-foreground" data-testid="text-footer-tagline">
-            Fast, discreet medical documentation
+            Website created by{" "}
+            <a
+              href="https://oraginalconcepts.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-primary transition-colors"
+              data-testid="link-footer-creator"
+            >
+              Oraginal Concepts
+            </a>
           </p>
         </div>
       </div>
