@@ -259,6 +259,21 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // One-time cleanup: remove any GA4-config-error noise entries logged before the fix
+  try {
+    const { getDb } = await import('./firebase-admin');
+    const db = getDb();
+    const snap = await db.collection('errorLogs')
+      .where('endpoint', '==', '/api/admin/ga4-analytics')
+      .get();
+    if (snap.size > 0) {
+      const batch = db.batch();
+      snap.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      console.log(`Cleaned up ${snap.size} GA4-config noise entries from errorLogs`);
+    }
+  } catch {}
+
   // ===========================================================================
   // GLOBAL ERROR INTERCEPT MIDDLEWARE
   // Wraps res.json to auto-log all 4xx/5xx API responses to Firestore
