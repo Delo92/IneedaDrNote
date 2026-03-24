@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "wouter";
+import { useState, useEffect } from "react";
+import { Link, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useConfig } from "@/contexts/ConfigContext";
@@ -39,6 +39,16 @@ export default function Home() {
   const { isAuthenticated, user } = useAuth();
   const [openFaq, setOpenFaq] = useState(0);
   const [activeDept, setActiveDept] = useState(0);
+  const searchString = useSearch();
+  const promoFromUrl = new URLSearchParams(searchString).get("promo") || "";
+  const [appliedPromo, setAppliedPromo] = useState("");
+
+  useEffect(() => {
+    if (promoFromUrl) {
+      setAppliedPromo(promoFromUrl.toUpperCase());
+      localStorage.setItem("pendingPromoCode", promoFromUrl.toUpperCase());
+    }
+  }, [promoFromUrl]);
 
   const heroMediaUrl = config.heroMediaUrl || config.heroBackgroundUrl;
   const mediaType = heroMediaUrl ? getMediaType(heroMediaUrl) : null;
@@ -112,6 +122,15 @@ export default function Home() {
 
   return (
     <div className="flex flex-col">
+      {appliedPromo && (
+        <div className="bg-green-600 text-white text-center py-2.5 px-4 text-sm font-medium flex items-center justify-center gap-2" data-testid="banner-promo-applied">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Referral code <strong className="mx-1">{appliedPromo}</strong> has been applied to your order!
+          <Link href={isAuthenticated ? "/dashboard/applicant/applications/new" : "/register"} className="underline underline-offset-2 ml-1 hover:text-green-100">
+            {isAuthenticated ? "Start your order →" : "Register to redeem →"}
+          </Link>
+        </div>
+      )}
       {/* Hero Section */}
       <section className="relative min-h-[85vh] flex items-center">
         {heroMediaUrl && mediaType === 'image' && (

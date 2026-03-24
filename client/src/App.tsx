@@ -61,9 +61,12 @@ function PromoRedirect() {
   const [, setLocation] = useLocation();
   useEffect(() => {
     if (params.code) {
-      localStorage.setItem("pendingPromoCode", params.code.toUpperCase());
+      const code = params.code.toUpperCase();
+      localStorage.setItem("pendingPromoCode", code);
+      setLocation(`/?promo=${encodeURIComponent(code)}`);
+    } else {
+      setLocation("/");
     }
-    setLocation("/");
   }, []);
   return null;
 }
